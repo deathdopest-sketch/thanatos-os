@@ -1,0 +1,17 @@
+[Unit]
+Description=Thanatos OS local allowlisted ingestion daemon
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/share/thanatos/native/ingestion/thanatos_ingestor.py --config %h/.config/thanatos/ingestion.json
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/thanatos
+
+[Install]
+WantedBy=default.target

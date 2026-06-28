@@ -1,0 +1,62 @@
+{
+  "database_path": "~/.local/share/thanatos/ingestion.sqlite3",
+  "poll_interval_seconds": 20,
+  "max_file_bytes": 1048576,
+  "allowed_roots": [
+    "~/.local/share/thanatos/inbox"
+  ],
+  "ignored_names": [
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    ".venv",
+    "__pycache__"
+  ],
+  "ignored_suffixes": [
+    ".env",
+    ".key",
+    ".pem",
+    ".p12",
+    ".sqlite",
+    ".sqlite3",
+    ".db",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".mp4",
+    ".mov",
+    ".mkv",
+    ".zip",
+    ".7z",
+    ".rar"
+  ],
+  "text_suffixes": [
+    ".txt",
+    ".md",
+    ".json",
+    ".jsonc",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".py",
+    ".rs",
+    ".go",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".css",
+    ".html",
+    ".sh",
+    ".ps1",
+    ".toml",
+    ".yaml",
+    ".yml"
+  ],
+  "network_metadata": true,
+  "raw_packet_capture": false
+}
