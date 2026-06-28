@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Rnd } from 'react-rnd';
 import gsap from 'gsap';
@@ -708,21 +708,105 @@ function getVisualizerPalette(theme: ThanatosTheme) {
   return { flame: [255, 35, 96], ghost: [255, 235, 230], shadow: [4, 1, 6], accent: [142, 28, 255] };
 }
 
+type MatrixState = 'idle' | 'active' | 'error';
+
+type MatrixCell = {
+  id: number;
+  type: 'data' | 'sprite' | 'logo' | 'status' | 'meter';
+  label: string;
+  spriteX: number;
+  spriteY: number;
+  pulse: number;
+};
+
+type MatrixStyle = CSSProperties & {
+  '--matrix-flame': string;
+  '--matrix-ghost': string;
+  '--matrix-shadow': string;
+  '--matrix-accent': string;
+};
+
+type MatrixCellStyle = CSSProperties & {
+  '--sprite-x': string;
+  '--sprite-y': string;
+  '--cell-pulse': string;
+  '--meter-level'?: string;
+};
+
+const matrixLabels = [
+  'PORTRAIT_LILLY',
+  'REAPER_SYS v4.1\nSTATUS: ACTIVE',
+  "LILLY'S GARDEN\nOBS_DATA",
+  'BIOSYNC\nWAITING',
+  'ASH_STREAM',
+  'DATA VEIN',
+  'REBOOT SEQ',
+  'FIRE STICK',
+  'DATA_LOG',
+  'SYSTEM LOG',
+  'LILLY_ACROBAT_SEQ',
+  'FIRE_STICK_PERFORMANCE',
+  'IGNITION_SEQ',
+  'SYSTEM ENERGY TRANSFER',
+  'FLAME_OS',
+  'CONSUMED_OS',
+  'THANATOS OS',
+  'ASCENSION STATUS',
+  'MUMBLECHAT OBSERVED',
+  'DATA SEALED'
+];
+
+const matrixCells: MatrixCell[] = Array.from({ length: 100 }, (_, index) => {
+  const id = index + 1;
+  const row = Math.floor(index / 10);
+  const column = index % 10;
+  const isHeader = row === 0;
+  const isFooter = row === 9;
+  const logoBand = row === 5 && column >= 1 && column <= 7;
+  const meterColumn = column === 8 || id === 44 || id === 66;
+  const dataColumn = column === 0 || column === 9 || id % 13 === 0;
+  const type: MatrixCell['type'] = logoBand ? 'logo' : meterColumn ? 'meter' : isHeader || isFooter || dataColumn ? 'data' : row >= 7 ? 'status' : 'sprite';
+  const label = logoBand ? 'THANATOS OS' : matrixLabels[(id + row + column) % matrixLabels.length];
+
+  return {
+    id,
+    type,
+    label,
+    spriteX: column,
+    spriteY: row,
+    pulse: ((id * 17) % 100) / 100
+  };
+});
+
+function averageFrequencyRange(frequency: Uint8Array, start: number, end: number) {
+  const slice = frequency.slice(start, end);
+  return slice.reduce((sum, value) => sum + value, 0) / (slice.length * 255 || 1);
+}
+
+function getMatrixCellText(cell: MatrixCell, level: number, matrixState: MatrixState) {
+  if (cell.type === 'logo') return 'THANATOS\nOS';
+  if (cell.type === 'meter') return `${cell.label}\n${Math.round(level * 100)}%`;
+  if (cell.type === 'status') return `${cell.label}\n${matrixState.toUpperCase()}`;
+  return cell.label;
+}
+
 function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef(0);
   const streamRef = useRef<MediaStream | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
-  const themeRef = useRef(theme);
   const [status, setStatus] = useState('Choose a browser tab, screen, or app window and enable audio sharing.');
   const [active, setActive] = useState(false);
   const [level, setLevel] = useState(0);
+  const [matrixState, setMatrixState] = useState<MatrixState>('idle');
+  const palette = getVisualizerPalette(theme);
+  const visualizerStyle: MatrixStyle = {
+    '--matrix-flame': palette.flame.join(', '),
+    '--matrix-ghost': palette.ghost.join(', '),
+    '--matrix-shadow': palette.shadow.join(', '),
+    '--matrix-accent': palette.accent.join(', ')
+  };
 
-  useEffect(() => {
-    themeRef.current = theme;
-  }, [theme]);
-
-  const stop = useCallback(() => {
+  const stop = useCallback((nextState: MatrixState = 'idle') => {
     window.cancelAnimationFrame(rafRef.current);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     void contextRef.current?.close();
@@ -730,6 +814,7 @@ function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
     contextRef.current = null;
     setActive(false);
     setLevel(0);
+    setMatrixState(nextState);
     document.documentElement.style.setProperty('--audio-level', '0');
     document.documentElement.style.setProperty('--audio-bass', '0');
     document.documentElement.style.setProperty('--audio-mid', '0');
@@ -751,6 +836,7 @@ function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
       if (!audioTracks.length) {
         stream.getTracks().forEach((track) => track.stop());
         setStatus('No audio track was shared. Pick a tab/screen and enable Share audio.');
+        setMatrixState('error');
         return;
       }
 
@@ -765,129 +851,21 @@ function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
       streamRef.current = stream;
       contextRef.current = audioContext;
       setActive(true);
+      setMatrixState('active');
       setStatus('Audio curse active. Thanatos is listening to the shared device/tab audio.');
 
       const frequency = new Uint8Array(analyser.frequencyBinCount);
-      const waveform = new Uint8Array(analyser.fftSize);
-      const canvas = canvasRef.current;
-      const context = canvas?.getContext('2d');
 
       const draw = () => {
         analyser.getByteFrequencyData(frequency);
-        analyser.getByteTimeDomainData(waveform);
 
-        const bass = frequency.slice(0, 24).reduce((sum, value) => sum + value, 0) / (24 * 255);
-        const mid = frequency.slice(24, 96).reduce((sum, value) => sum + value, 0) / (72 * 255);
+        const bass = averageFrequencyRange(frequency, 0, 24);
+        const mid = averageFrequencyRange(frequency, 24, 96);
         const intensity = frequency.reduce((sum, value) => sum + value, 0) / (frequency.length * 255);
         setLevel(intensity);
         document.documentElement.style.setProperty('--audio-level', intensity.toFixed(3));
         document.documentElement.style.setProperty('--audio-bass', bass.toFixed(3));
         document.documentElement.style.setProperty('--audio-mid', mid.toFixed(3));
-
-        if (canvas && context) {
-          const palette = getVisualizerPalette(themeRef.current);
-          const width = canvas.clientWidth * window.devicePixelRatio;
-          const height = canvas.clientHeight * window.devicePixelRatio;
-          if (canvas.width !== width || canvas.height !== height) {
-            canvas.width = width;
-            canvas.height = height;
-          }
-
-          const [flameR, flameG, flameB] = palette.flame;
-          const [ghostR, ghostG, ghostB] = palette.ghost;
-          const [shadowR, shadowG, shadowB] = palette.shadow;
-          const [accentR, accentG, accentB] = palette.accent;
-          const pulse = Math.max(0.05, intensity);
-          const centerX = width / 2;
-          const centerY = height / 2;
-          const base = Math.min(width, height);
-
-          context.clearRect(0, 0, width, height);
-          context.fillStyle = `rgba(${shadowR}, ${shadowG}, ${shadowB}, 0.78)`;
-          context.fillRect(0, 0, width, height);
-
-          const glow = context.createRadialGradient(centerX, centerY, base * 0.04, centerX, centerY, base * (0.32 + bass * 0.12));
-          glow.addColorStop(0, `rgba(${flameR}, ${flameG}, ${flameB}, ${0.2 + bass * 0.42})`);
-          glow.addColorStop(0.45, `rgba(${accentR}, ${accentG}, ${accentB}, ${0.1 + mid * 0.28})`);
-          glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          context.fillStyle = glow;
-          context.fillRect(0, 0, width, height);
-
-          context.save();
-          context.translate(centerX, centerY);
-          context.rotate(-Math.PI / 2 + bass * 0.12);
-          const radius = base * (0.13 + bass * 0.08);
-          const bars = 128;
-          for (let index = 0; index < bars; index += 1) {
-            const value = frequency[index] / 255;
-            const length = radius + value * base * 0.32;
-            context.rotate((Math.PI * 2) / bars);
-            context.strokeStyle = `rgba(${flameR}, ${Math.floor(flameG + value * 58)}, ${Math.floor(flameB + mid * 80)}, ${0.24 + value * 0.68})`;
-            context.shadowColor = `rgba(${flameR}, ${flameG}, ${flameB}, ${0.2 + value * 0.6})`;
-            context.shadowBlur = 14 + value * 34;
-            context.lineWidth = 1.5 + value * 7;
-            context.beginPath();
-            context.moveTo(radius, 0);
-            context.lineTo(length, 0);
-            context.stroke();
-          }
-          context.restore();
-
-          context.save();
-          context.translate(centerX, centerY);
-          context.strokeStyle = `rgba(${ghostR}, ${ghostG}, ${ghostB}, ${0.12 + pulse * 0.34})`;
-          context.lineWidth = 1.4;
-          for (let ring = 0; ring < 4; ring += 1) {
-            context.beginPath();
-            context.ellipse(0, 0, base * (0.09 + ring * 0.065 + bass * 0.035), base * (0.16 + ring * 0.05 + mid * 0.04), ring * 0.72 + intensity, 0, Math.PI * 2);
-            context.stroke();
-          }
-          context.restore();
-
-          context.strokeStyle = `rgba(${ghostR}, ${ghostG}, ${ghostB}, ${0.22 + intensity * 0.52})`;
-          context.shadowColor = `rgba(${flameR}, ${flameG}, ${flameB}, ${0.18 + bass * 0.48})`;
-          context.shadowBlur = 18 + bass * 42;
-          context.lineWidth = 2.2;
-          context.beginPath();
-          waveform.forEach((value, index) => {
-            const x = (index / (waveform.length - 1)) * width;
-            const y = height * 0.52 + ((value - 128) / 128) * height * (0.18 + mid * 0.22);
-            if (index === 0) context.moveTo(x, y);
-            else context.lineTo(x, y);
-          });
-          context.stroke();
-
-          context.save();
-          context.translate(centerX, centerY - base * 0.01);
-          context.fillStyle = `rgba(${ghostR}, ${ghostG}, ${ghostB}, ${0.08 + bass * 0.2})`;
-          context.strokeStyle = `rgba(${flameR}, ${flameG}, ${flameB}, ${0.24 + bass * 0.52})`;
-          context.lineWidth = 2 + bass * 4;
-          context.beginPath();
-          context.ellipse(0, 0, base * (0.115 + bass * 0.018), base * (0.15 + bass * 0.03), 0, 0, Math.PI * 2);
-          context.fill();
-          context.stroke();
-
-          context.fillStyle = `rgba(0, 0, 0, ${0.54 + bass * 0.24})`;
-          context.beginPath();
-          context.ellipse(-base * 0.044, -base * 0.02, base * (0.022 + bass * 0.012), base * (0.038 + mid * 0.014), -0.2, 0, Math.PI * 2);
-          context.ellipse(base * 0.044, -base * 0.02, base * (0.022 + bass * 0.012), base * (0.038 + mid * 0.014), 0.2, 0, Math.PI * 2);
-          context.fill();
-
-          context.strokeStyle = `rgba(${flameR}, ${flameG}, ${flameB}, ${0.32 + intensity * 0.5})`;
-          context.beginPath();
-          context.moveTo(-base * 0.05, base * 0.056);
-          context.quadraticCurveTo(0, base * (0.09 + bass * 0.035), base * 0.05, base * 0.056);
-          context.stroke();
-
-          for (let tooth = -2; tooth <= 2; tooth += 1) {
-            const heightOffset = frequency[50 + tooth * 5 + 12] / 255;
-            context.beginPath();
-            context.moveTo(tooth * base * 0.017, base * 0.071);
-            context.lineTo(tooth * base * 0.017, base * (0.095 + heightOffset * 0.04));
-            context.stroke();
-          }
-          context.restore();
-        }
 
         rafRef.current = window.requestAnimationFrame(draw);
       };
@@ -895,18 +873,36 @@ function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
       draw();
     } catch (caught) {
       setStatus(caught instanceof Error ? caught.message : 'Audio capture failed.');
-      stop();
+      stop('error');
     }
   };
 
   return (
-    <div className={`visualizer-app visualizer-${theme}`}>
-      <canvas ref={canvasRef} />
+    <div className={`visualizer-app visualizer-${theme}`} style={visualizerStyle}>
+      <div className={`thanatos-matrix matrix-${matrixState}`} aria-label="REAPER_OS BIOSYNC matrix">
+        {matrixCells.map((cell) => {
+          const meterLevel = cell.type === 'meter' ? Math.min(1, level + cell.pulse * 0.18) : undefined;
+          const cellStyle: MatrixCellStyle = {
+            '--sprite-x': `${cell.spriteX}`,
+            '--sprite-y': `${cell.spriteY}`,
+            '--cell-pulse': `${cell.pulse}`,
+            ...(meterLevel === undefined ? {} : { '--meter-level': `${meterLevel}` })
+          };
+
+          return (
+            <div key={cell.id} className={clsx('matrix-cell', `matrix-${cell.type}`, (cell.type === 'data' || cell.type === 'status' || cell.type === 'logo') && 'data-text-cell')} style={cellStyle}>
+              {cell.type === 'sprite' ? <div className="matrix-sprite" /> : null}
+              {cell.type === 'meter' ? <div className="matrix-meter" /> : null}
+              <span>{getMatrixCellText(cell, level, matrixState)}</span>
+            </div>
+          );
+        })}
+      </div>
       <div className="visualizer-controls">
         <button type="button" onClick={start}>
           <RadioTower size={15} /> Capture Device Audio
         </button>
-        <button type="button" onClick={stop} disabled={!active}>
+        <button type="button" onClick={() => stop()} disabled={!active}>
           <X size={15} /> Stop
         </button>
         <span>{Math.round(level * 100)}%</span>
