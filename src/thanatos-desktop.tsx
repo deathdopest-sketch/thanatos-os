@@ -11,6 +11,7 @@ import {
   FilePlus2,
   Folder,
   FolderPlus,
+  Globe,
   Lock,
   Maximize2,
   Minus,
@@ -34,6 +35,34 @@ type OpenWindow = {
   z: number;
   minimized: boolean;
   maximized: boolean;
+};
+
+type MumbleChatStats = {
+  loggedIn: boolean | null;
+  userId: number | null;
+  username: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  unreadPms: number | null;
+  onlineFriends: string[];
+  offlineFriends: string[];
+  totalFriends: number | null;
+  lastUpdated: string | null;
+  status: 'idle' | 'checking' | 'online' | 'unavailable' | 'blocked';
+  message: string;
+};
+
+type MumbleChatStatsPayload = {
+  type?: string;
+  loggedIn?: unknown;
+  userId?: unknown;
+  username?: unknown;
+  displayName?: unknown;
+  avatarUrl?: unknown;
+  unreadPms?: unknown;
+  onlineFriends?: unknown;
+  offlineFriends?: unknown;
+  totalFriends?: unknown;
 };
 
 const bloodCommands = ['help', 'status', 'apps', 'date', 'skull', 'clear'];
@@ -459,6 +488,144 @@ function ColorPickerApp() {
   );
 }
 
+function MumbleChatApp() {
+  const [frameKey, setFrameKey] = useState(0);
+  const [stats, setStats] = useState<MumbleChatStats>({
+    loggedIn: null,
+    userId: null,
+    username: null,
+    displayName: null,
+    avatarUrl: null,
+    unreadPms: null,
+    onlineFriends: [],
+    offlineFriends: [],
+    totalFriends: null,
+    lastUpdated: null,
+    status: 'idle',
+    message: 'Open MumbleChat, then press Live Stats. Thanatos will poll the approved bridge every 30 seconds.'
+  });
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://mumblechat.online') {
+        return;
+      }
+
+      const payload = event.data as MumbleChatStatsPayload;
+      if (payload.type !== 'mumblechat:stats') {
+        return;
+      }
+
+      setStats({
+        loggedIn: typeof payload.loggedIn === 'boolean' ? payload.loggedIn : null,
+        userId: typeof payload.userId === 'number' ? payload.userId : null,
+        username: typeof payload.username === 'string' ? payload.username : null,
+        displayName: typeof payload.displayName === 'string' ? payload.displayName : null,
+        avatarUrl: typeof payload.avatarUrl === 'string' ? payload.avatarUrl : null,
+        unreadPms: typeof payload.unreadPms === 'number' ? payload.unreadPms : null,
+        onlineFriends: Array.isArray(payload.onlineFriends) ? payload.onlineFriends.map(String) : [],
+        offlineFriends: Array.isArray(payload.offlineFriends) ? payload.offlineFriends.map(String) : [],
+        totalFriends: typeof payload.totalFriends === 'number' ? payload.totalFriends : null,
+        lastUpdated: new Date().toLocaleTimeString(),
+        status: payload.loggedIn === false ? 'unavailable' : 'online',
+        message: payload.loggedIn === false ? 'MumbleChat responded: user is not logged in.' : 'Live MumbleChat stats received.'
+      });
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const requestStats = useCallback(() => {
+    setStats((current) => ({
+      ...current,
+      status: 'checking',
+      message: 'Requesting approved MumbleChat stats from the embedded frame...'
+    }));
+
+    const frame = document.querySelector<HTMLIFrameElement>('#mumblechat-frame');
+    frame?.contentWindow?.postMessage({ type: 'thanatos:request-stats' }, 'https://mumblechat.online');
+
+    window.setTimeout(() => {
+      setStats((current) => {
+        if (current.status !== 'checking') {
+          return current;
+        }
+        return {
+          ...current,
+          status: 'blocked',
+          lastUpdated: new Date().toLocaleTimeString(),
+          message:
+            'No mumblechat:stats response yet. Check that THANATOS_ORIGIN exactly matches this Thanatos origin and that MumbleChat allows iframe embedding.'
+        };
+      });
+    }, 1800);
+  }, []);
+
+  useEffect(() => {
+    const initialRequest = window.setTimeout(requestStats, 2200);
+    const poll = window.setInterval(requestStats, 30_000);
+    return () => {
+      window.clearTimeout(initialRequest);
+      window.clearInterval(poll);
+    };
+  }, [frameKey, requestStats]);
+
+  return (
+    <div className="mumblechat-app">
+      <div className="mumblechat-toolbar">
+        <button type="button" onClick={requestStats}>
+          <RefreshCcw size={15} /> Live Stats
+        </button>
+        <button type="button" onClick={() => setFrameKey((value) => value + 1)}>
+          <RefreshCcw size={15} /> Reload
+        </button>
+        <a href="https://mumblechat.online" target="_blank" rel="noreferrer">
+          <Globe size={15} /> Open Site
+        </a>
+      </div>
+      <div className="mumblechat-layout">
+        <iframe
+          key={frameKey}
+          id="mumblechat-frame"
+          title="MumbleChat"
+          src="https://mumblechat.online"
+          referrerPolicy="no-referrer"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+        />
+        <aside className="mumblechat-stats">
+          <h3>Live Stats</h3>
+          <div className={`status-orb ${stats.status}`} />
+          <div className="mumblechat-profile">
+            {stats.avatarUrl ? <img src={stats.avatarUrl} alt="" referrerPolicy="no-referrer" /> : <div>{(stats.displayName ?? stats.username ?? '?').slice(0, 1)}</div>}
+            <span>{stats.displayName ?? stats.username ?? 'Unknown user'}</span>
+          </div>
+          <dl>
+            <dt>Login</dt>
+            <dd>{stats.loggedIn === null ? 'unknown' : stats.loggedIn ? 'logged in' : 'logged out'}</dd>
+            <dt>User ID</dt>
+            <dd>{stats.userId ?? 'unknown'}</dd>
+            <dt>Username</dt>
+            <dd>{stats.username ?? 'unknown'}</dd>
+            <dt>Unread PMs</dt>
+            <dd>{stats.unreadPms === null ? 'unknown' : stats.unreadPms}</dd>
+            <dt>Total Friends</dt>
+            <dd>{stats.totalFriends === null ? 'unknown' : stats.totalFriends}</dd>
+            <dt>Online Friends</dt>
+            <dd>{stats.onlineFriends.length ? stats.onlineFriends.join(', ') : 'unknown'}</dd>
+            <dt>Offline Friends</dt>
+            <dd>{stats.offlineFriends.length ? stats.offlineFriends.join(', ') : 'unknown'}</dd>
+            <dt>Updated</dt>
+            <dd>{stats.lastUpdated ?? 'never'}</dd>
+          </dl>
+          <p>{stats.message}</p>
+          <code>postMessage: mumblechat:stats</code>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
 function ClockApp() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -560,6 +727,7 @@ function AppContent({ app, openWindows }: { app: ThanatosApp; openWindows: OpenW
   if (app.locked) return <PrivateGate app={app} />;
   if (app.id === 'terminal') return <TerminalApp openWindows={openWindows} />;
   if (app.id === 'files') return <FileManagerApp />;
+  if (app.id === 'mumblechat') return <MumbleChatApp />;
   if (app.id === 'settings') return <SettingsApp />;
   if (app.id === 'tasks') return <TaskManagerApp openWindows={openWindows} />;
   if (app.id === 'clock') return <ClockApp />;

@@ -647,6 +647,159 @@ input:focus {
   font-family: 'JetBrains Mono', monospace;
 }
 
+.mumblechat-app {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto 1fr;
+  gap: 10px;
+}
+
+.mumblechat-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mumblechat-toolbar button,
+.mumblechat-toolbar a {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 47, 88, 0.28);
+  border-radius: 7px;
+  background: linear-gradient(180deg, rgba(100, 0, 18, 0.55), rgba(18, 5, 7, 0.82));
+  color: #fff4ec;
+  text-decoration: none;
+}
+
+.mumblechat-layout {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(360px, 1fr) 260px;
+  gap: 10px;
+}
+
+.mumblechat-layout iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  border: 1px solid rgba(255, 47, 88, 0.24);
+  border-radius: 7px;
+  background: #050203;
+}
+
+.mumblechat-stats {
+  position: relative;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(255, 47, 88, 0.24);
+  border-radius: 7px;
+  background: rgba(3, 2, 3, 0.72);
+}
+
+.mumblechat-stats h3 {
+  margin: 0 0 12px;
+  color: #ff315e;
+}
+
+.mumblechat-profile {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 9px;
+  border: 1px solid rgba(255, 47, 88, 0.18);
+  border-radius: 7px;
+  background: rgba(255, 0, 48, 0.06);
+}
+
+.mumblechat-profile img,
+.mumblechat-profile div {
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 47, 88, 0.34);
+  border-radius: 7px;
+}
+
+.mumblechat-profile img {
+  object-fit: cover;
+}
+
+.mumblechat-profile div {
+  display: grid;
+  place-items: center;
+  color: #ff315e;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+}
+
+.mumblechat-profile span {
+  overflow: hidden;
+  color: #fff4ec;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mumblechat-stats dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  margin: 0;
+}
+
+.mumblechat-stats dt {
+  color: #c7a45e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.mumblechat-stats dd {
+  margin: 0 0 9px;
+  color: #fff4ec;
+}
+
+.mumblechat-stats p,
+.mumblechat-stats code {
+  display: block;
+  margin: 12px 0 0;
+  color: #c6b7aa;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.status-orb {
+  position: absolute;
+  right: 14px;
+  top: 16px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6c6470;
+  box-shadow: 0 0 16px rgba(108, 100, 112, 0.5);
+}
+
+.status-orb.checking {
+  background: #c7a45e;
+  box-shadow: 0 0 18px rgba(199, 164, 94, 0.78);
+}
+
+.status-orb.online {
+  background: #5effa4;
+  box-shadow: 0 0 18px rgba(94, 255, 164, 0.78);
+}
+
+.status-orb.unavailable,
+.status-orb.blocked {
+  background: #ff315e;
+  box-shadow: 0 0 18px rgba(255, 49, 94, 0.78);
+}
+
 .clock-panel,
 .private-panel,
 .generic-app {
@@ -1045,7 +1198,12 @@ input:focus {
   }
 
   .file-layout,
-  .split-panel {
+  .split-panel,
+  .mumblechat-layout {
     grid-template-columns: 1fr;
+  }
+
+  .mumblechat-stats {
+    max-height: 230px;
   }
 }
