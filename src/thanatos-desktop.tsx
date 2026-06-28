@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Rnd } from 'react-rnd';
 import gsap from 'gsap';
@@ -17,6 +17,7 @@ import {
   Minus,
   Play,
   RefreshCcw,
+  RadioTower,
   Save,
   Search,
   ShieldCheck,
@@ -36,6 +37,8 @@ type OpenWindow = {
   minimized: boolean;
   maximized: boolean;
 };
+
+type ThanatosTheme = 'lilly' | 'death' | 'zombitious';
 
 type MumbleChatStats = {
   loggedIn: boolean | null;
@@ -490,6 +493,7 @@ function ColorPickerApp() {
 
 function MumbleChatApp() {
   const [frameKey, setFrameKey] = useState(0);
+  const [frameLoaded, setFrameLoaded] = useState(false);
   const [stats, setStats] = useState<MumbleChatStats>({
     loggedIn: null,
     userId: null,
@@ -502,7 +506,7 @@ function MumbleChatApp() {
     totalFriends: null,
     lastUpdated: null,
     status: 'idle',
-    message: 'Open MumbleChat, then press Live Stats. Thanatos will poll the approved bridge every 30 seconds.'
+    message: 'Sign into MumbleChat inside this window. Thanatos polls the approved bridge every 30 seconds after the frame loads.'
   });
 
   useEffect(() => {
@@ -540,7 +544,9 @@ function MumbleChatApp() {
     setStats((current) => ({
       ...current,
       status: 'checking',
-      message: 'Requesting approved MumbleChat stats from the embedded frame...'
+      message: frameLoaded
+        ? 'Requesting approved MumbleChat stats from your embedded account session...'
+        : 'Waiting for the MumbleChat iframe to finish loading before stats can be requested...'
     }));
 
     const frame = document.querySelector<HTMLIFrameElement>('#mumblechat-frame');
@@ -560,16 +566,29 @@ function MumbleChatApp() {
         };
       });
     }, 1800);
-  }, []);
+  }, [frameLoaded]);
 
   useEffect(() => {
-    const initialRequest = window.setTimeout(requestStats, 2200);
     const poll = window.setInterval(requestStats, 30_000);
     return () => {
-      window.clearTimeout(initialRequest);
       window.clearInterval(poll);
     };
   }, [frameKey, requestStats]);
+
+  const handleFrameLoad = () => {
+    setFrameLoaded(true);
+    window.setTimeout(requestStats, 900);
+  };
+
+  const reloadFrame = () => {
+    setFrameLoaded(false);
+    setFrameKey((value) => value + 1);
+    setStats((current) => ({
+      ...current,
+      status: 'idle',
+      message: 'Reloading MumbleChat. Sign in inside the iframe if needed.'
+    }));
+  };
 
   return (
     <div className="mumblechat-app">
@@ -577,7 +596,7 @@ function MumbleChatApp() {
         <button type="button" onClick={requestStats}>
           <RefreshCcw size={15} /> Live Stats
         </button>
-        <button type="button" onClick={() => setFrameKey((value) => value + 1)}>
+        <button type="button" onClick={reloadFrame}>
           <RefreshCcw size={15} /> Reload
         </button>
         <a href="https://mumblechat.online" target="_blank" rel="noreferrer">
@@ -592,6 +611,7 @@ function MumbleChatApp() {
           src="https://mumblechat.online"
           referrerPolicy="no-referrer"
           sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+          onLoad={handleFrameLoad}
         />
         <aside className="mumblechat-stats">
           <h3>Live Stats</h3>
@@ -619,9 +639,147 @@ function MumbleChatApp() {
             <dd>{stats.lastUpdated ?? 'never'}</dd>
           </dl>
           <p>{stats.message}</p>
-          <code>postMessage: mumblechat:stats</code>
+          <code>{frameLoaded ? 'iframe: loaded' : 'iframe: loading'} | postMessage: mumblechat:stats</code>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function AudioVisualizerApp() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rafRef = useRef(0);
+  const streamRef = useRef<MediaStream | null>(null);
+  const contextRef = useRef<AudioContext | null>(null);
+  const [status, setStatus] = useState('Choose a browser tab, screen, or app window and enable audio sharing.');
+  const [active, setActive] = useState(false);
+  const [level, setLevel] = useState(0);
+
+  const stop = useCallback(() => {
+    window.cancelAnimationFrame(rafRef.current);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    void contextRef.current?.close();
+    streamRef.current = null;
+    contextRef.current = null;
+    setActive(false);
+    setLevel(0);
+    document.documentElement.style.setProperty('--audio-level', '0');
+    document.documentElement.style.setProperty('--audio-bass', '0');
+    document.documentElement.style.setProperty('--audio-mid', '0');
+  }, []);
+
+  useEffect(() => stop, [stop]);
+
+  const start = async () => {
+    stop();
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true
+      });
+
+      const audioTracks = stream.getAudioTracks();
+      stream.getVideoTracks().forEach((track) => track.stop());
+      if (!audioTracks.length) {
+        stream.getTracks().forEach((track) => track.stop());
+        setStatus('No audio track was shared. Pick a tab/screen and enable Share audio.');
+        return;
+      }
+
+      const AudioContextCtor = window.AudioContext;
+      const audioContext = new AudioContextCtor();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.72;
+      const source = audioContext.createMediaStreamSource(new MediaStream(audioTracks));
+      source.connect(analyser);
+
+      streamRef.current = stream;
+      contextRef.current = audioContext;
+      setActive(true);
+      setStatus('Audio curse active. Thanatos is listening to the shared device/tab audio.');
+
+      const frequency = new Uint8Array(analyser.frequencyBinCount);
+      const waveform = new Uint8Array(analyser.fftSize);
+      const canvas = canvasRef.current;
+      const context = canvas?.getContext('2d');
+
+      const draw = () => {
+        analyser.getByteFrequencyData(frequency);
+        analyser.getByteTimeDomainData(waveform);
+
+        const bass = frequency.slice(0, 24).reduce((sum, value) => sum + value, 0) / (24 * 255);
+        const mid = frequency.slice(24, 96).reduce((sum, value) => sum + value, 0) / (72 * 255);
+        const intensity = frequency.reduce((sum, value) => sum + value, 0) / (frequency.length * 255);
+        setLevel(intensity);
+        document.documentElement.style.setProperty('--audio-level', intensity.toFixed(3));
+        document.documentElement.style.setProperty('--audio-bass', bass.toFixed(3));
+        document.documentElement.style.setProperty('--audio-mid', mid.toFixed(3));
+
+        if (canvas && context) {
+          const width = canvas.clientWidth * window.devicePixelRatio;
+          const height = canvas.clientHeight * window.devicePixelRatio;
+          if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+          }
+
+          context.clearRect(0, 0, width, height);
+          context.fillStyle = 'rgba(3, 1, 2, 0.44)';
+          context.fillRect(0, 0, width, height);
+          context.save();
+          context.translate(width / 2, height / 2);
+          const radius = Math.min(width, height) * (0.16 + bass * 0.08);
+          const bars = 96;
+          for (let index = 0; index < bars; index += 1) {
+            const value = frequency[index] / 255;
+            const length = radius + value * Math.min(width, height) * 0.28;
+            context.rotate((Math.PI * 2) / bars);
+            context.strokeStyle = `rgba(255, ${Math.floor(22 + value * 80)}, ${Math.floor(54 + mid * 80)}, ${0.35 + value * 0.55})`;
+            context.lineWidth = 2 + value * 5;
+            context.beginPath();
+            context.moveTo(radius, 0);
+            context.lineTo(length, 0);
+            context.stroke();
+          }
+          context.restore();
+
+          context.strokeStyle = `rgba(255, 225, 210, ${0.26 + intensity * 0.42})`;
+          context.lineWidth = 2;
+          context.beginPath();
+          waveform.forEach((value, index) => {
+            const x = (index / (waveform.length - 1)) * width;
+            const y = height * 0.5 + ((value - 128) / 128) * height * (0.18 + mid * 0.18);
+            if (index === 0) context.moveTo(x, y);
+            else context.lineTo(x, y);
+          });
+          context.stroke();
+        }
+
+        rafRef.current = window.requestAnimationFrame(draw);
+      };
+
+      draw();
+    } catch (caught) {
+      setStatus(caught instanceof Error ? caught.message : 'Audio capture failed.');
+      stop();
+    }
+  };
+
+  return (
+    <div className="visualizer-app">
+      <canvas ref={canvasRef} />
+      <div className="visualizer-controls">
+        <button type="button" onClick={start}>
+          <RadioTower size={15} /> Capture Device Audio
+        </button>
+        <button type="button" onClick={stop} disabled={!active}>
+          <X size={15} /> Stop
+        </button>
+        <span>{Math.round(level * 100)}%</span>
+      </div>
+      <p>{status}</p>
     </div>
   );
 }
@@ -640,11 +798,32 @@ function ClockApp() {
   );
 }
 
-function SettingsApp() {
+function SettingsApp({ theme, onThemeChange }: { theme: ThanatosTheme; onThemeChange: (theme: ThanatosTheme) => void }) {
   const [crt, setCrt] = useState(true);
   const [violence, setViolence] = useState(85);
   return (
     <div className="settings-grid">
+      <section className="theme-section">
+        <h3>Theme</h3>
+        <div className="theme-options">
+          <button type="button" className={theme === 'lilly' ? 'selected' : ''} onClick={() => onThemeChange('lilly')}>
+            Lilly
+          </button>
+          <button type="button" className={theme === 'death' ? 'selected' : ''} onClick={() => onThemeChange('death')}>
+            Death
+          </button>
+          <button type="button" className={theme === 'zombitious' ? 'selected' : ''} onClick={() => onThemeChange('zombitious')}>
+            zomBitious
+          </button>
+        </div>
+        <p>
+          {theme === 'death'
+            ? 'Reaper system v3.0 background active.'
+            : theme === 'zombitious'
+              ? 'zomBitious background active.'
+              : 'Lilly background active.'}
+        </p>
+      </section>
       <section>
         <h3>Visual Severity</h3>
         <input type="range" min="0" max="100" value={violence} onChange={(event) => setViolence(Number(event.target.value))} />
@@ -723,12 +902,22 @@ function GenericWorkingApp({ app }: { app: ThanatosApp }) {
   );
 }
 
-function AppContent({ app, openWindows }: { app: ThanatosApp; openWindows: OpenWindow[] }) {
+function AppContent({
+  app,
+  openWindows,
+  theme,
+  onThemeChange
+}: {
+  app: ThanatosApp;
+  openWindows: OpenWindow[];
+  theme: ThanatosTheme;
+  onThemeChange: (theme: ThanatosTheme) => void;
+}) {
   if (app.locked) return <PrivateGate app={app} />;
   if (app.id === 'terminal') return <TerminalApp openWindows={openWindows} />;
   if (app.id === 'files') return <FileManagerApp />;
   if (app.id === 'mumblechat') return <MumbleChatApp />;
-  if (app.id === 'settings') return <SettingsApp />;
+  if (app.id === 'settings') return <SettingsApp theme={theme} onThemeChange={onThemeChange} />;
   if (app.id === 'tasks') return <TaskManagerApp openWindows={openWindows} />;
   if (app.id === 'clock') return <ClockApp />;
   if (app.id === 'calculator') return <CalculatorApp />;
@@ -740,6 +929,7 @@ function AppContent({ app, openWindows }: { app: ThanatosApp; openWindows: OpenW
   if (app.id === 'base64') return <Base64App />;
   if (app.id === 'regex') return <RegexTesterApp />;
   if (app.id === 'colors') return <ColorPickerApp />;
+  if (app.id === 'visualizer') return <AudioVisualizerApp />;
   return <GenericWorkingApp app={app} />;
 }
 
@@ -747,6 +937,8 @@ function DesktopWindow({
   openWindow,
   active,
   openWindows,
+  theme,
+  onThemeChange,
   onFocus,
   onClose,
   onMinimize,
@@ -755,6 +947,8 @@ function DesktopWindow({
   openWindow: OpenWindow;
   active: boolean;
   openWindows: OpenWindow[];
+  theme: ThanatosTheme;
+  onThemeChange: (theme: ThanatosTheme) => void;
   onFocus: () => void;
   onClose: () => void;
   onMinimize: () => void;
@@ -798,7 +992,7 @@ function DesktopWindow({
         </div>
       </div>
       <div className="window-content">
-        <AppContent app={openWindow.app} openWindows={openWindows} />
+        <AppContent app={openWindow.app} openWindows={openWindows} theme={theme} onThemeChange={onThemeChange} />
       </div>
     </Rnd>
   );
@@ -844,11 +1038,20 @@ export function ThanatosDesktop() {
   const [startOpen, setStartOpen] = useState(false);
   const [windows, setWindows] = useState<OpenWindow[]>([]);
   const [clock, setClock] = useState(() => new Date());
+  const [theme, setTheme] = useState<ThanatosTheme>(() => {
+    const stored = localStorage.getItem('thanatos.theme');
+    return stored === 'death' || stored === 'zombitious' || stored === 'lilly' ? stored : 'lilly';
+  });
   const handleBootDone = useCallback(() => setBooted(true), []);
 
   useEffect(() => {
     const interval = window.setInterval(() => setClock(new Date()), 1000);
     return () => window.clearInterval(interval);
+  }, []);
+
+  const changeTheme = useCallback((nextTheme: ThanatosTheme) => {
+    setTheme(nextTheme);
+    localStorage.setItem('thanatos.theme', nextTheme);
   }, []);
 
   const topZ = windows.reduce((max, item) => Math.max(max, item.z), 10);
@@ -870,12 +1073,13 @@ export function ThanatosDesktop() {
   };
 
   return (
-    <main className="desktop-shell">
+    <main className={`desktop-shell theme-${theme}`}>
       {!booted ? <BootLayer onDone={handleBootDone} /> : null}
       <div className="desktop-wallpaper" />
       <div className="sprite-background" aria-hidden="true" />
       <div className="blood-rain" />
       <div className="crt-overlay" />
+      <div className="audio-curse" aria-hidden="true" />
       {booted ? <QuoteFlash /> : null}
       <SkullFlash />
       <div className="death-brand">
@@ -888,6 +1092,8 @@ export function ThanatosDesktop() {
             key={item.id}
             openWindow={item}
             openWindows={windows}
+            theme={theme}
+            onThemeChange={changeTheme}
             active={item.id === activeId}
             onFocus={() => patchWindow(item.id, { z: topZ + 1 })}
             onClose={() => setWindows((current) => current.filter((open) => open.id !== item.id))}
