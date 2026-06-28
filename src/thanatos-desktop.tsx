@@ -36,6 +36,10 @@ type OpenWindow = {
   z: number;
   minimized: boolean;
   maximized: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 type ThanatosTheme = 'lilly' | 'death' | 'zombitious';
@@ -646,14 +650,25 @@ function MumbleChatApp() {
   );
 }
 
-function AudioVisualizerApp() {
+function getVisualizerPalette(theme: ThanatosTheme) {
+  if (theme === 'death') return { flame: [255, 18, 42], ghost: [255, 226, 214], shadow: [8, 0, 3], accent: [120, 0, 18] };
+  if (theme === 'zombitious') return { flame: [120, 255, 120], ghost: [220, 255, 210], shadow: [1, 10, 4], accent: [255, 34, 82] };
+  return { flame: [255, 35, 96], ghost: [255, 235, 230], shadow: [4, 1, 6], accent: [142, 28, 255] };
+}
+
+function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef(0);
   const streamRef = useRef<MediaStream | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
+  const themeRef = useRef(theme);
   const [status, setStatus] = useState('Choose a browser tab, screen, or app window and enable audio sharing.');
   const [active, setActive] = useState(false);
   const [level, setLevel] = useState(0);
+
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
 
   const stop = useCallback(() => {
     window.cancelAnimationFrame(rafRef.current);
@@ -718,6 +733,7 @@ function AudioVisualizerApp() {
         document.documentElement.style.setProperty('--audio-mid', mid.toFixed(3));
 
         if (canvas && context) {
+          const palette = getVisualizerPalette(themeRef.current);
           const width = canvas.clientWidth * window.devicePixelRatio;
           const height = canvas.clientHeight * window.devicePixelRatio;
           if (canvas.width !== width || canvas.height !== height) {
@@ -725,19 +741,39 @@ function AudioVisualizerApp() {
             canvas.height = height;
           }
 
+          const [flameR, flameG, flameB] = palette.flame;
+          const [ghostR, ghostG, ghostB] = palette.ghost;
+          const [shadowR, shadowG, shadowB] = palette.shadow;
+          const [accentR, accentG, accentB] = palette.accent;
+          const pulse = Math.max(0.05, intensity);
+          const centerX = width / 2;
+          const centerY = height / 2;
+          const base = Math.min(width, height);
+
           context.clearRect(0, 0, width, height);
-          context.fillStyle = 'rgba(3, 1, 2, 0.44)';
+          context.fillStyle = `rgba(${shadowR}, ${shadowG}, ${shadowB}, 0.78)`;
           context.fillRect(0, 0, width, height);
+
+          const glow = context.createRadialGradient(centerX, centerY, base * 0.04, centerX, centerY, base * (0.32 + bass * 0.12));
+          glow.addColorStop(0, `rgba(${flameR}, ${flameG}, ${flameB}, ${0.2 + bass * 0.42})`);
+          glow.addColorStop(0.45, `rgba(${accentR}, ${accentG}, ${accentB}, ${0.1 + mid * 0.28})`);
+          glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+          context.fillStyle = glow;
+          context.fillRect(0, 0, width, height);
+
           context.save();
-          context.translate(width / 2, height / 2);
-          const radius = Math.min(width, height) * (0.16 + bass * 0.08);
-          const bars = 96;
+          context.translate(centerX, centerY);
+          context.rotate(-Math.PI / 2 + bass * 0.12);
+          const radius = base * (0.13 + bass * 0.08);
+          const bars = 128;
           for (let index = 0; index < bars; index += 1) {
             const value = frequency[index] / 255;
-            const length = radius + value * Math.min(width, height) * 0.28;
+            const length = radius + value * base * 0.32;
             context.rotate((Math.PI * 2) / bars);
-            context.strokeStyle = `rgba(255, ${Math.floor(22 + value * 80)}, ${Math.floor(54 + mid * 80)}, ${0.35 + value * 0.55})`;
-            context.lineWidth = 2 + value * 5;
+            context.strokeStyle = `rgba(${flameR}, ${Math.floor(flameG + value * 58)}, ${Math.floor(flameB + mid * 80)}, ${0.24 + value * 0.68})`;
+            context.shadowColor = `rgba(${flameR}, ${flameG}, ${flameB}, ${0.2 + value * 0.6})`;
+            context.shadowBlur = 14 + value * 34;
+            context.lineWidth = 1.5 + value * 7;
             context.beginPath();
             context.moveTo(radius, 0);
             context.lineTo(length, 0);
@@ -745,16 +781,60 @@ function AudioVisualizerApp() {
           }
           context.restore();
 
-          context.strokeStyle = `rgba(255, 225, 210, ${0.26 + intensity * 0.42})`;
-          context.lineWidth = 2;
+          context.save();
+          context.translate(centerX, centerY);
+          context.strokeStyle = `rgba(${ghostR}, ${ghostG}, ${ghostB}, ${0.12 + pulse * 0.34})`;
+          context.lineWidth = 1.4;
+          for (let ring = 0; ring < 4; ring += 1) {
+            context.beginPath();
+            context.ellipse(0, 0, base * (0.09 + ring * 0.065 + bass * 0.035), base * (0.16 + ring * 0.05 + mid * 0.04), ring * 0.72 + intensity, 0, Math.PI * 2);
+            context.stroke();
+          }
+          context.restore();
+
+          context.strokeStyle = `rgba(${ghostR}, ${ghostG}, ${ghostB}, ${0.22 + intensity * 0.52})`;
+          context.shadowColor = `rgba(${flameR}, ${flameG}, ${flameB}, ${0.18 + bass * 0.48})`;
+          context.shadowBlur = 18 + bass * 42;
+          context.lineWidth = 2.2;
           context.beginPath();
           waveform.forEach((value, index) => {
             const x = (index / (waveform.length - 1)) * width;
-            const y = height * 0.5 + ((value - 128) / 128) * height * (0.18 + mid * 0.18);
+            const y = height * 0.52 + ((value - 128) / 128) * height * (0.18 + mid * 0.22);
             if (index === 0) context.moveTo(x, y);
             else context.lineTo(x, y);
           });
           context.stroke();
+
+          context.save();
+          context.translate(centerX, centerY - base * 0.01);
+          context.fillStyle = `rgba(${ghostR}, ${ghostG}, ${ghostB}, ${0.08 + bass * 0.2})`;
+          context.strokeStyle = `rgba(${flameR}, ${flameG}, ${flameB}, ${0.24 + bass * 0.52})`;
+          context.lineWidth = 2 + bass * 4;
+          context.beginPath();
+          context.ellipse(0, 0, base * (0.115 + bass * 0.018), base * (0.15 + bass * 0.03), 0, 0, Math.PI * 2);
+          context.fill();
+          context.stroke();
+
+          context.fillStyle = `rgba(0, 0, 0, ${0.54 + bass * 0.24})`;
+          context.beginPath();
+          context.ellipse(-base * 0.044, -base * 0.02, base * (0.022 + bass * 0.012), base * (0.038 + mid * 0.014), -0.2, 0, Math.PI * 2);
+          context.ellipse(base * 0.044, -base * 0.02, base * (0.022 + bass * 0.012), base * (0.038 + mid * 0.014), 0.2, 0, Math.PI * 2);
+          context.fill();
+
+          context.strokeStyle = `rgba(${flameR}, ${flameG}, ${flameB}, ${0.32 + intensity * 0.5})`;
+          context.beginPath();
+          context.moveTo(-base * 0.05, base * 0.056);
+          context.quadraticCurveTo(0, base * (0.09 + bass * 0.035), base * 0.05, base * 0.056);
+          context.stroke();
+
+          for (let tooth = -2; tooth <= 2; tooth += 1) {
+            const heightOffset = frequency[50 + tooth * 5 + 12] / 255;
+            context.beginPath();
+            context.moveTo(tooth * base * 0.017, base * 0.071);
+            context.lineTo(tooth * base * 0.017, base * (0.095 + heightOffset * 0.04));
+            context.stroke();
+          }
+          context.restore();
         }
 
         rafRef.current = window.requestAnimationFrame(draw);
@@ -768,7 +848,7 @@ function AudioVisualizerApp() {
   };
 
   return (
-    <div className="visualizer-app">
+    <div className={`visualizer-app visualizer-${theme}`}>
       <canvas ref={canvasRef} />
       <div className="visualizer-controls">
         <button type="button" onClick={start}>
@@ -929,7 +1009,7 @@ function AppContent({
   if (app.id === 'base64') return <Base64App />;
   if (app.id === 'regex') return <RegexTesterApp />;
   if (app.id === 'colors') return <ColorPickerApp />;
-  if (app.id === 'visualizer') return <AudioVisualizerApp />;
+  if (app.id === 'visualizer') return <AudioVisualizerApp theme={theme} />;
   return <GenericWorkingApp app={app} />;
 }
 
@@ -940,6 +1020,8 @@ function DesktopWindow({
   theme,
   onThemeChange,
   onFocus,
+  onMove,
+  onResize,
   onClose,
   onMinimize,
   onMaximize
@@ -950,15 +1032,16 @@ function DesktopWindow({
   theme: ThanatosTheme;
   onThemeChange: (theme: ThanatosTheme) => void;
   onFocus: () => void;
+  onMove: (x: number, y: number) => void;
+  onResize: (width: number, height: number, x: number, y: number) => void;
   onClose: () => void;
   onMinimize: () => void;
   onMaximize: () => void;
 }) {
   if (openWindow.minimized) return null;
 
-  const placementSeed = Array.from(openWindow.id).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const size = openWindow.maximized ? { width: 'calc(100vw - 24px)', height: 'calc(100vh - 86px)' } : { width: 760, height: 500 };
-  const position = openWindow.maximized ? { x: 12, y: 12 } : { x: 58 + (placementSeed % 7) * 28, y: 44 + (placementSeed % 5) * 24 };
+  const size = openWindow.maximized ? { width: 'calc(100vw - 24px)', height: 'calc(100vh - 86px)' } : { width: openWindow.width, height: openWindow.height };
+  const position = openWindow.maximized ? { x: 12, y: 12 } : { x: openWindow.x, y: openWindow.y };
 
   return (
     <Rnd
@@ -972,6 +1055,8 @@ function DesktopWindow({
       dragHandleClassName="window-titlebar"
       style={{ zIndex: openWindow.z }}
       onMouseDown={onFocus}
+      onDragStop={(_, data) => onMove(data.x, data.y)}
+      onResizeStop={(_, __, ref, ___, nextPosition) => onResize(ref.offsetWidth, ref.offsetHeight, nextPosition.x, nextPosition.y)}
       className={clsx('desktop-window', active && 'active-window')}
     >
       <div className="window-titlebar">
@@ -1063,7 +1148,22 @@ export function ThanatosDesktop() {
       if (existing) {
         return current.map((item) => (item.id === existing.id ? { ...item, minimized: false, z: topZ + 1 } : item));
       }
-      return [...current, { id: nanoid(), app, z: topZ + 1, minimized: false, maximized: false }];
+      const id = nanoid();
+      const placementSeed = Array.from(id).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+      return [
+        ...current,
+        {
+          id,
+          app,
+          z: topZ + 1,
+          minimized: false,
+          maximized: false,
+          x: 58 + (placementSeed % 7) * 28,
+          y: 44 + (placementSeed % 5) * 24,
+          width: 760,
+          height: 500
+        }
+      ];
     });
     setStartOpen(false);
   };
@@ -1096,6 +1196,8 @@ export function ThanatosDesktop() {
             onThemeChange={changeTheme}
             active={item.id === activeId}
             onFocus={() => patchWindow(item.id, { z: topZ + 1 })}
+            onMove={(x, y) => patchWindow(item.id, { x, y, z: topZ + 1 })}
+            onResize={(width, height, x, y) => patchWindow(item.id, { width, height, x, y, z: topZ + 1 })}
             onClose={() => setWindows((current) => current.filter((open) => open.id !== item.id))}
             onMinimize={() => patchWindow(item.id, { minimized: true })}
             onMaximize={() => patchWindow(item.id, { maximized: !item.maximized, z: topZ + 1 })}

@@ -8,6 +8,10 @@
   --audio-level: 0;
   --audio-bass: 0;
   --audio-mid: 0;
+  --curse-primary: 255, 35, 96;
+  --curse-accent: 142, 28, 255;
+  --curse-ghost: 255, 235, 230;
+  --curse-shadow: 4, 1, 6;
 }
 
 * {
@@ -110,12 +114,33 @@ input:focus {
   background-image: url('/assets/thanatos-background.png');
 }
 
+.theme-lilly {
+  --curse-primary: 255, 35, 96;
+  --curse-accent: 142, 28, 255;
+  --curse-ghost: 255, 235, 230;
+  --curse-shadow: 4, 1, 6;
+}
+
 .theme-death .sprite-background {
   background-image: url('/assets/death-thanatos-background.png');
 }
 
+.theme-death {
+  --curse-primary: 255, 18, 42;
+  --curse-accent: 120, 0, 18;
+  --curse-ghost: 255, 226, 214;
+  --curse-shadow: 8, 0, 3;
+}
+
 .theme-zombitious .sprite-background {
   background-image: url('/assets/zombitious-thanatos-background.png');
+}
+
+.theme-zombitious {
+  --curse-primary: 120, 255, 120;
+  --curse-accent: 255, 34, 82;
+  --curse-ghost: 220, 255, 210;
+  --curse-shadow: 1, 10, 4;
 }
 
 .blood-rain {
@@ -149,11 +174,12 @@ input:focus {
   inset: 0;
   z-index: 5;
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 0, 48, calc(var(--audio-bass) * 0.34)), transparent calc(24% + var(--audio-level) * 18%)),
-    repeating-radial-gradient(circle at 50% 52%, rgba(255, 230, 220, calc(var(--audio-mid) * 0.12)) 0 1px, transparent 2px 16px);
-  filter: blur(calc(var(--audio-level) * 2px)) saturate(calc(1 + var(--audio-bass) * 0.8));
+    radial-gradient(circle at 50% 48%, rgba(var(--curse-primary), calc(var(--audio-bass) * 0.45)), transparent calc(18% + var(--audio-level) * 22%)),
+    radial-gradient(ellipse at 50% 50%, transparent 0 20%, rgba(0, 0, 0, calc(var(--audio-level) * 0.42)) 31%, transparent 45%),
+    repeating-radial-gradient(circle at 50% 52%, rgba(var(--curse-ghost), calc(var(--audio-mid) * 0.16)) 0 1px, transparent 2px 14px);
+  filter: blur(calc(var(--audio-level) * 2.6px)) saturate(calc(1 + var(--audio-bass) * 1.1)) contrast(calc(1 + var(--audio-level) * 0.4));
   opacity: calc(var(--audio-level) * 0.88);
-  transform: scale(calc(1 + var(--audio-bass) * 0.035));
+  transform: scale(calc(1 + var(--audio-bass) * 0.055)) rotate(calc((var(--audio-mid) - var(--audio-bass)) * 1deg));
   mix-blend-mode: screen;
   transition: opacity 90ms linear, transform 90ms linear, filter 90ms linear;
 }
@@ -165,8 +191,9 @@ input:focus {
   z-index: 6;
   content: '';
   background:
-    linear-gradient(90deg, rgba(255, 0, 48, calc(var(--audio-bass) * 0.18)), transparent 16%, transparent 84%, rgba(90, 255, 190, calc(var(--audio-mid) * 0.12))),
-    radial-gradient(circle at 50% 50%, transparent 0 48%, rgba(0, 0, 0, calc(0.28 + var(--audio-level) * 0.24)));
+    linear-gradient(90deg, rgba(var(--curse-primary), calc(var(--audio-bass) * 0.22)), transparent 16%, transparent 84%, rgba(var(--curse-accent), calc(var(--audio-mid) * 0.18))),
+    radial-gradient(circle at 50% 50%, transparent 0 39%, rgba(0, 0, 0, calc(0.26 + var(--audio-level) * 0.36))),
+    repeating-linear-gradient(calc(90deg + var(--audio-mid) * 16deg), transparent 0 18px, rgba(var(--curse-ghost), calc(var(--audio-level) * 0.035)) 19px 21px);
   opacity: calc(0.18 + var(--audio-level) * 0.48);
   mix-blend-mode: hard-light;
 }
@@ -714,6 +741,8 @@ input:focus {
 }
 
 .visualizer-app {
+  position: relative;
+  isolation: isolate;
   display: grid;
   height: 100%;
   min-height: 0;
@@ -721,16 +750,28 @@ input:focus {
   gap: 12px;
 }
 
+.visualizer-app::before {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: '';
+  background:
+    radial-gradient(circle at 50% 38%, rgba(var(--curse-primary), 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(var(--curse-accent), 0.12), transparent 42%);
+  opacity: 0.78;
+}
+
 .visualizer-app canvas {
   width: 100%;
   height: 100%;
   min-height: 240px;
-  border: 1px solid rgba(255, 47, 88, 0.26);
+  border: 1px solid rgba(var(--curse-primary), 0.42);
   border-radius: 7px;
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 0, 48, 0.12), transparent 38%),
-    #030102;
-  box-shadow: inset 0 0 48px rgba(255, 0, 48, 0.12), 0 0 28px rgba(255, 0, 48, 0.14);
+    radial-gradient(circle at 50% 50%, rgba(var(--curse-primary), 0.18), transparent 38%),
+    rgba(var(--curse-shadow), 0.96);
+  box-shadow: inset 0 0 62px rgba(var(--curse-primary), 0.16), 0 0 34px rgba(var(--curse-primary), 0.2);
 }
 
 .visualizer-controls {
@@ -746,10 +787,11 @@ input:focus {
   align-items: center;
   gap: 7px;
   padding: 0 12px;
-  border: 1px solid rgba(255, 47, 88, 0.28);
+  border: 1px solid rgba(var(--curse-primary), 0.38);
   border-radius: 7px;
-  background: linear-gradient(180deg, rgba(100, 0, 18, 0.55), rgba(18, 5, 7, 0.82));
+  background: linear-gradient(180deg, rgba(var(--curse-primary), 0.28), rgba(var(--curse-shadow), 0.88));
   color: #fff4ec;
+  box-shadow: inset 0 0 16px rgba(var(--curse-primary), 0.08);
 }
 
 .visualizer-controls button:disabled {
@@ -759,9 +801,10 @@ input:focus {
 
 .visualizer-controls span {
   margin-left: auto;
-  color: #ff315e;
+  color: rgb(var(--curse-primary));
   font-family: 'JetBrains Mono', monospace;
   font-weight: 800;
+  text-shadow: 0 0 12px rgba(var(--curse-primary), 0.48);
 }
 
 .visualizer-app p {
