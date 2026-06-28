@@ -43,7 +43,7 @@ type OpenWindow = {
   height: number;
 };
 
-type ThanatosTheme = 'lilly' | 'death' | 'zombitious';
+type ThanatosTheme = 'lilly' | 'lilly-garden' | 'death' | 'zombitious';
 
 type MumbleChatStats = {
   loggedIn: boolean | null;
@@ -704,6 +704,7 @@ function MumbleChatApp() {
 function getVisualizerPalette(theme: ThanatosTheme) {
   if (theme === 'death') return { flame: [255, 18, 42], ghost: [255, 226, 214], shadow: [8, 0, 3], accent: [120, 0, 18] };
   if (theme === 'zombitious') return { flame: [120, 255, 120], ghost: [220, 255, 210], shadow: [1, 10, 4], accent: [255, 34, 82] };
+  if (theme === 'lilly-garden') return { flame: [124, 255, 118], ghost: [235, 255, 218], shadow: [2, 8, 4], accent: [255, 135, 34] };
   return { flame: [255, 35, 96], ghost: [255, 235, 230], shadow: [4, 1, 6], accent: [142, 28, 255] };
 }
 
@@ -940,6 +941,9 @@ function SettingsApp({ theme, onThemeChange }: { theme: ThanatosTheme; onThemeCh
           <button type="button" className={theme === 'lilly' ? 'selected' : ''} onClick={() => onThemeChange('lilly')}>
             Lilly
           </button>
+          <button type="button" className={theme === 'lilly-garden' ? 'selected' : ''} onClick={() => onThemeChange('lilly-garden')}>
+            Lilly's Garden
+          </button>
           <button type="button" className={theme === 'death' ? 'selected' : ''} onClick={() => onThemeChange('death')}>
             Death
           </button>
@@ -952,7 +956,9 @@ function SettingsApp({ theme, onThemeChange }: { theme: ThanatosTheme; onThemeCh
             ? 'Reaper system v3.0 background active.'
             : theme === 'zombitious'
               ? 'zomBitious background active.'
-              : 'Lilly background active.'}
+              : theme === 'lilly-garden'
+                ? "Lilly's Garden background active."
+                : 'Lilly background active.'}
         </p>
       </section>
       <section>
@@ -1176,7 +1182,7 @@ export function ThanatosDesktop() {
   const [clock, setClock] = useState(() => new Date());
   const [theme, setTheme] = useState<ThanatosTheme>(() => {
     const stored = readStoredValue('thanatos.theme');
-    return stored === 'death' || stored === 'zombitious' || stored === 'lilly' ? stored : 'lilly';
+    return stored === 'death' || stored === 'zombitious' || stored === 'lilly' || stored === 'lilly-garden' ? stored : 'lilly';
   });
   const handleBootDone = useCallback(() => setBooted(true), []);
 

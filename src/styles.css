@@ -164,6 +164,17 @@ input:focus {
   --curse-shadow: 4, 1, 6;
 }
 
+.theme-lilly-garden .sprite-background {
+  background-image: url('/assets/lilly-garden-thanatos-theme.png');
+}
+
+.theme-lilly-garden {
+  --curse-primary: 124, 255, 118;
+  --curse-accent: 255, 135, 34;
+  --curse-ghost: 235, 255, 218;
+  --curse-shadow: 2, 8, 4;
+}
+
 .theme-death .sprite-background {
   background-image: url('/assets/death-thanatos-background.png');
 }
@@ -655,7 +666,7 @@ input:focus {
 
 .theme-options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
