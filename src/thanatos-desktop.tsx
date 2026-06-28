@@ -3,7 +3,25 @@ import { Canvas } from '@react-three/fiber';
 import { Rnd } from 'react-rnd';
 import gsap from 'gsap';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronUp, File, FilePlus2, Folder, FolderPlus, Lock, Maximize2, Minus, Power, Search, ShieldCheck, X } from 'lucide-react';
+import DOMPurify from 'dompurify';
+import {
+  ChevronUp,
+  Eye,
+  File,
+  FilePlus2,
+  Folder,
+  FolderPlus,
+  Lock,
+  Maximize2,
+  Minus,
+  Play,
+  RefreshCcw,
+  Save,
+  Search,
+  ShieldCheck,
+  Skull,
+  X
+} from 'lucide-react';
 import clsx from 'clsx';
 import { nanoid } from 'nanoid';
 import { appCategories, appRegistry, type AppCategory, type ThanatosApp } from './apps';
@@ -18,12 +36,14 @@ type OpenWindow = {
   maximized: boolean;
 };
 
+const bloodCommands = ['help', 'status', 'apps', 'date', 'skull', 'clear'];
+
 function AshField() {
   const positions = useMemo(() => {
-    const points = new Float32Array(500 * 3);
+    const points = new Float32Array(900 * 3);
     for (let index = 0; index < points.length; index += 3) {
-      points[index] = (Math.random() - 0.5) * 26;
-      points[index + 1] = (Math.random() - 0.5) * 16;
+      points[index] = (Math.random() - 0.5) * 28;
+      points[index + 1] = (Math.random() - 0.5) * 18;
       points[index + 2] = (Math.random() - 0.5) * 18;
     }
     return points;
@@ -34,7 +54,7 @@ function AshField() {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
-      <pointsMaterial color="#d9fff4" size={0.035} transparent opacity={0.48} blending={2} depthWrite={false} />
+      <pointsMaterial color="#ff174d" size={0.038} transparent opacity={0.52} blending={2} depthWrite={false} />
     </points>
   );
 }
@@ -48,14 +68,12 @@ function BootLayer({ onDone }: { onDone: () => void }) {
         onDone();
       }
     };
-    const timeline = gsap.timeline({
-      defaults: { ease: 'power3.out' },
-      onComplete: finish
-    });
-    const fallback = window.setTimeout(finish, 1800);
+    const timeline = gsap.timeline({ defaults: { ease: 'power3.out' }, onComplete: finish });
+    const fallback = window.setTimeout(finish, 1900);
     timeline
-      .fromTo('.boot-glyph', { y: 22, opacity: 0 }, { y: 0, opacity: 1, stagger: 0.045, duration: 0.5 })
-      .to('.boot-panel', { opacity: 0, scale: 1.02, duration: 0.45, delay: 0.45 });
+      .fromTo('.boot-sigil', { rotate: -18, scale: 0.7, opacity: 0 }, { rotate: 0, scale: 1, opacity: 1, duration: 0.5 })
+      .fromTo('.boot-glyph', { y: 28, opacity: 0 }, { y: 0, opacity: 1, stagger: 0.035, duration: 0.45 }, '-=0.18')
+      .to('.boot-panel', { opacity: 0, scale: 1.04, duration: 0.55, delay: 0.4 });
     return () => {
       window.clearTimeout(fallback);
       timeline.kill();
@@ -68,11 +86,120 @@ function BootLayer({ onDone }: { onDone: () => void }) {
         <AshField />
       </Canvas>
       <div className="boot-mark" aria-label="Thanatos OS booting">
-        {'THANATOS OS'.split('').map((char, index) => (
-          <span className="boot-glyph" key={`${char}-${index}`}>
-            {char === ' ' ? '\u00a0' : char}
-          </span>
+        <Skull className="boot-sigil" size={86} />
+        <div>
+          {'THANATOS OS'.split('').map((char, index) => (
+            <span className="boot-glyph" key={`${char}-${index}`}>
+              {char === ' ' ? '\u00a0' : char}
+            </span>
+          ))}
+        </div>
+        <small>DEATH KERNEL ONLINE</small>
+      </div>
+    </div>
+  );
+}
+
+function SkullFlash() {
+  const [flashes, setFlashes] = useState<Array<{ id: string; x: number; y: number; size: number }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timeout = 0;
+    const schedule = () => {
+      timeout = window.setTimeout(
+        () => {
+          if (cancelled) {
+            return;
+          }
+          const count = 2 + Math.floor(Math.random() * 3);
+          const next = Array.from({ length: count }, () => ({
+            id: nanoid(),
+            x: 8 + Math.random() * 84,
+            y: 8 + Math.random() * 72,
+            size: 42 + Math.random() * 86
+          }));
+          setFlashes(next);
+          window.setTimeout(() => setFlashes([]), 850);
+          schedule();
+        },
+        7000 + Math.random() * 9000
+      );
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, []);
+
+  return (
+    <div className="skull-flash-layer" aria-hidden="true">
+      {flashes.map((flash) => (
+        <Skull key={flash.id} style={{ left: `${flash.x}%`, top: `${flash.y}%`, width: flash.size, height: flash.size }} />
+      ))}
+    </div>
+  );
+}
+
+function markdownToHtml(input: string) {
+  const escaped = input
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .split('\n')
+    .map((line) => {
+      if (line.startsWith('### ')) return `<h3>${line.slice(4)}</h3>`;
+      if (line.startsWith('## ')) return `<h2>${line.slice(3)}</h2>`;
+      if (line.startsWith('# ')) return `<h1>${line.slice(2)}</h1>`;
+      if (line.startsWith('- ')) return `<li>${line.slice(2)}</li>`;
+      return line.trim() ? `<p>${line}</p>` : '<br />';
+    })
+    .join('');
+  return DOMPurify.sanitize(escaped.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>'));
+}
+
+function TerminalApp({ openWindows }: { openWindows: OpenWindow[] }) {
+  const [lines, setLines] = useState<string[]>([
+    'thanatos@crypt:~$ status',
+    'death kernel awake',
+    'vfs mounted at /home/death',
+    'remote bridge offline until paired'
+  ]);
+  const [input, setInput] = useState('');
+
+  const run = () => {
+    const command = input.trim();
+    if (!command) return;
+    if (command === 'clear') {
+      setLines([]);
+      setInput('');
+      return;
+    }
+    const output: Record<string, string[]> = {
+      help: [`commands: ${bloodCommands.join(', ')}`],
+      status: ['shell: online', `windows: ${openWindows.length}`, 'vfs: persistent indexeddb', 'threat posture: locked'],
+      apps: appRegistry.slice(0, 18).map((app) => `${app.id.padEnd(16, ' ')} ${app.name}`),
+      date: [new Date().toString()],
+      skull: ['skull pulse armed; watch the glass']
+    };
+    setLines((current) => [...current, `thanatos@crypt:~$ ${command}`, ...(output[command] ?? [`unknown command: ${command}`])]);
+    setInput('');
+  };
+
+  return (
+    <div className="terminal-app">
+      <div className="terminal-output">
+        {lines.map((line, index) => (
+          <p key={`${line}-${index}`}>{line}</p>
         ))}
+      </div>
+      <div className="terminal-input">
+        <span>$</span>
+        <input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && run()} autoFocus />
+        <button type="button" onClick={run}>
+          <Play size={15} />
+        </button>
       </div>
     </div>
   );
@@ -123,91 +250,326 @@ function FileManagerApp() {
   );
 }
 
-function AppContent({ app }: { app: ThanatosApp }) {
-  if (app.id === 'terminal') {
+function CalculatorApp() {
+  const [expression, setExpression] = useState('13 * 13 + 6');
+  const [result, setResult] = useState('175');
+  const calculate = () => {
+    if (!/^[\d+\-*/(). %]+$/.test(expression)) {
+      setResult('blocked');
+      return;
+    }
+    try {
+      const value = Function(`"use strict"; return (${expression.replaceAll('%', '/100')});`)();
+      setResult(Number.isFinite(value) ? String(value) : 'invalid');
+    } catch {
+      setResult('invalid');
+    }
+  };
+  return (
+    <div className="tool-panel calculator-panel">
+      <input value={expression} onChange={(event) => setExpression(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && calculate()} />
+      <strong>{result}</strong>
+      <button type="button" onClick={calculate}>
+        <Play size={15} /> Calculate
+      </button>
+    </div>
+  );
+}
+
+function NotesApp() {
+  const [text, setText] = useState(() => localStorage.getItem('thanatos.notes') ?? 'Blood oath:\n- Build the OS\n- Own the machine\n');
+  const save = () => localStorage.setItem('thanatos.notes', text);
+  return (
+    <div className="editor-panel">
+      <textarea value={text} onChange={(event) => setText(event.target.value)} />
+      <button type="button" onClick={save}>
+        <Save size={15} /> Save local note
+      </button>
+    </div>
+  );
+}
+
+function MarkdownApp() {
+  const [text, setText] = useState('# Thanatos Log\n\n- VFS online\n- Shell armed\n- Skull flash enabled\n');
+  return (
+    <div className="split-panel">
+      <textarea value={text} onChange={(event) => setText(event.target.value)} />
+      <div className="markdown-preview" dangerouslySetInnerHTML={{ __html: markdownToHtml(text) }} />
+    </div>
+  );
+}
+
+function JsonFormatterApp() {
+  const [text, setText] = useState('{"system":"thanatos","state":"awake"}');
+  const [error, setError] = useState('');
+  const format = () => {
+    try {
+      setText(JSON.stringify(JSON.parse(text), null, 2));
+      setError('');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Invalid JSON');
+    }
+  };
+  return (
+    <div className="editor-panel">
+      <textarea value={text} onChange={(event) => setText(event.target.value)} />
+      {error ? <div className="vfs-error">{error}</div> : null}
+      <button type="button" onClick={format}>
+        <RefreshCcw size={15} /> Format JSON
+      </button>
+    </div>
+  );
+}
+
+function HashGeneratorApp() {
+  const [text, setText] = useState('thanatos');
+  const [digest, setDigest] = useState('');
+  const hash = async () => {
+    const bytes = new TextEncoder().encode(text);
+    const buffer = await crypto.subtle.digest('SHA-256', bytes);
+    setDigest(Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join(''));
+  };
+  return (
+    <div className="tool-panel">
+      <textarea value={text} onChange={(event) => setText(event.target.value)} />
+      <button type="button" onClick={hash}>
+        <Play size={15} /> SHA-256
+      </button>
+      <code>{digest || 'hash output waits here'}</code>
+    </div>
+  );
+}
+
+function PasswordGeneratorApp() {
+  const [password, setPassword] = useState('');
+  const generate = () => {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
+    const values = crypto.getRandomValues(new Uint32Array(24));
+    setPassword(Array.from(values, (value) => alphabet[value % alphabet.length]).join(''));
+  };
+  return (
+    <div className="tool-panel">
+      <button type="button" onClick={generate}>
+        <RefreshCcw size={15} /> Generate 24-char key
+      </button>
+      <code>{password || 'press generate'}</code>
+    </div>
+  );
+}
+
+function Base64App() {
+  const [plain, setPlain] = useState('Thanatos OS');
+  const [encoded, setEncoded] = useState('');
+  const encode = () => setEncoded(btoa(String.fromCharCode(...new TextEncoder().encode(plain))));
+  const decode = () => {
+    try {
+      const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+      setPlain(new TextDecoder().decode(bytes));
+    } catch {
+      setPlain('decode failed');
+    }
+  };
+  return (
+    <div className="split-panel compact">
+      <textarea value={plain} onChange={(event) => setPlain(event.target.value)} />
+      <textarea value={encoded} onChange={(event) => setEncoded(event.target.value)} />
+      <button type="button" onClick={encode}>
+        Encode
+      </button>
+      <button type="button" onClick={decode}>
+        Decode
+      </button>
+    </div>
+  );
+}
+
+function RegexTesterApp() {
+  const [pattern, setPattern] = useState('death|blood|skull');
+  const [sample, setSample] = useState('the death kernel bleeds red skull light');
+  const matches = useMemo(() => {
+    try {
+      return [...sample.matchAll(new RegExp(pattern, 'gi'))].map((match) => match[0]);
+    } catch {
+      return ['invalid pattern'];
+    }
+  }, [pattern, sample]);
+  return (
+    <div className="tool-panel">
+      <input value={pattern} onChange={(event) => setPattern(event.target.value)} />
+      <textarea value={sample} onChange={(event) => setSample(event.target.value)} />
+      <code>{matches.join(', ') || 'no matches'}</code>
+    </div>
+  );
+}
+
+function ColorPickerApp() {
+  const [color, setColor] = useState('#8f001d');
+  return (
+    <div className="color-panel">
+      <input type="color" value={color} onChange={(event) => setColor(event.target.value)} />
+      <div style={{ background: color }} />
+      <code>{color}</code>
+    </div>
+  );
+}
+
+function ClockApp() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+  return (
+    <div className="clock-panel">
+      <strong>{now.toLocaleTimeString()}</strong>
+      <span>{now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+    </div>
+  );
+}
+
+function SettingsApp() {
+  const [crt, setCrt] = useState(true);
+  const [violence, setViolence] = useState(85);
+  return (
+    <div className="settings-grid">
+      <section>
+        <h3>Visual Severity</h3>
+        <input type="range" min="0" max="100" value={violence} onChange={(event) => setViolence(Number(event.target.value))} />
+        <p>{violence}% blood glass intensity</p>
+      </section>
+      <section>
+        <h3>CRT Veil</h3>
+        <button type="button" onClick={() => setCrt((value) => !value)}>
+          {crt ? <Eye size={15} /> : <Eye size={15} />} {crt ? 'Enabled' : 'Disabled'}
+        </button>
+      </section>
+      <section>
+        <h3>Remote Control</h3>
+        <p>Pair only through Tailscale/WireGuard and short-lived local bridge tokens.</p>
+      </section>
+    </div>
+  );
+}
+
+function TaskManagerApp({ openWindows }: { openWindows: OpenWindow[] }) {
+  return (
+    <div className="system-table">
+      <div className="system-row header">
+        <span>Process</span>
+        <span>State</span>
+        <span>Z</span>
+      </div>
+      {openWindows.map((item) => (
+        <div className="system-row" key={item.id}>
+          <span>{item.app.name}</span>
+          <span>{item.minimized ? 'minimized' : 'active'}</span>
+          <span>{item.z}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PrivateGate({ app }: { app: ThanatosApp }) {
+  const [pin, setPin] = useState('');
+  const [unlocked, setUnlocked] = useState(false);
+  if (unlocked) {
     return (
-      <div className="terminal-body">
-        <p>thanatos@chromebook:~$ status</p>
-        <p>desktop shell online</p>
-        <p>secure remote control: broker not paired</p>
-        <p>thanatos@chromebook:~$</p>
+      <div className="private-panel">
+        <Skull size={48} />
+        <h3>{app.name}</h3>
+        <p>Private sandbox unlocked for this session. Real vault encryption comes next.</p>
       </div>
     );
   }
+  return (
+    <div className="private-panel">
+      <Lock size={44} />
+      <h3>{app.name}</h3>
+      <input value={pin} onChange={(event) => setPin(event.target.value)} placeholder="PIN" type="password" />
+      <button type="button" onClick={() => setUnlocked(pin === '1313')}>
+        Unlock
+      </button>
+      <small>dev PIN: 1313</small>
+    </div>
+  );
+}
 
-  if (app.id === 'files') {
-    return <FileManagerApp />;
-  }
-
-  if (app.id === 'settings') {
-    return (
-      <div className="settings-grid">
-        <section>
-          <h3>Security</h3>
-          <p>Private apps require a PIN gate before launch.</p>
-        </section>
-        <section>
-          <h3>Remote Control</h3>
-          <p>Use WireGuard/Tailscale reachability with short-lived WebRTC control tokens.</p>
-        </section>
-        <section>
-          <h3>Display</h3>
-          <p>CRT overlay, glass density, and accent color controls belong here.</p>
-        </section>
-      </div>
-    );
-  }
-
+function GenericWorkingApp({ app }: { app: ThanatosApp }) {
+  const [output, setOutput] = useState(`${app.name} ready.`);
   return (
     <div className="generic-app">
       <app.icon size={42} />
       <h3>{app.name}</h3>
       <p>{app.description}</p>
-      {app.locked ? <span className="security-chip">PIN gate required</span> : null}
+      <button type="button" onClick={() => setOutput(`${app.name} executed at ${new Date().toLocaleTimeString()}`)}>
+        <Play size={15} /> Run
+      </button>
+      <code>{output}</code>
     </div>
   );
 }
 
+function AppContent({ app, openWindows }: { app: ThanatosApp; openWindows: OpenWindow[] }) {
+  if (app.locked) return <PrivateGate app={app} />;
+  if (app.id === 'terminal') return <TerminalApp openWindows={openWindows} />;
+  if (app.id === 'files') return <FileManagerApp />;
+  if (app.id === 'settings') return <SettingsApp />;
+  if (app.id === 'tasks') return <TaskManagerApp openWindows={openWindows} />;
+  if (app.id === 'clock') return <ClockApp />;
+  if (app.id === 'calculator') return <CalculatorApp />;
+  if (app.id === 'notes' || app.id === 'writer' || app.id === 'story') return <NotesApp />;
+  if (app.id === 'markdown' || app.id === 'vscode') return <MarkdownApp />;
+  if (app.id === 'json') return <JsonFormatterApp />;
+  if (app.id === 'hash') return <HashGeneratorApp />;
+  if (app.id === 'passwords') return <PasswordGeneratorApp />;
+  if (app.id === 'base64') return <Base64App />;
+  if (app.id === 'regex') return <RegexTesterApp />;
+  if (app.id === 'colors') return <ColorPickerApp />;
+  return <GenericWorkingApp app={app} />;
+}
+
 function DesktopWindow({
-  window,
+  openWindow,
   active,
+  openWindows,
   onFocus,
   onClose,
   onMinimize,
   onMaximize
 }: {
-  window: OpenWindow;
+  openWindow: OpenWindow;
   active: boolean;
+  openWindows: OpenWindow[];
   onFocus: () => void;
   onClose: () => void;
   onMinimize: () => void;
   onMaximize: () => void;
 }) {
-  if (window.minimized) {
-    return null;
-  }
+  if (openWindow.minimized) return null;
 
-  const size = window.maximized ? { width: 'calc(100vw - 24px)', height: 'calc(100vh - 86px)' } : { width: 720, height: 460 };
-  const position = window.maximized ? { x: 12, y: 12 } : { x: 96 + window.z * 12, y: 72 + window.z * 8 };
+  const placementSeed = Array.from(openWindow.id).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const size = openWindow.maximized ? { width: 'calc(100vw - 24px)', height: 'calc(100vh - 86px)' } : { width: 760, height: 500 };
+  const position = openWindow.maximized ? { x: 12, y: 12 } : { x: 58 + (placementSeed % 7) * 28, y: 44 + (placementSeed % 5) * 24 };
 
   return (
     <Rnd
       bounds="parent"
       size={size}
       position={position}
-      disableDragging={window.maximized}
-      enableResizing={!window.maximized}
+      disableDragging={openWindow.maximized}
+      enableResizing={!openWindow.maximized}
       minWidth={360}
       minHeight={260}
       dragHandleClassName="window-titlebar"
-      style={{ zIndex: window.z }}
+      style={{ zIndex: openWindow.z }}
       onMouseDown={onFocus}
       className={clsx('desktop-window', active && 'active-window')}
     >
       <div className="window-titlebar">
         <div className="window-title">
-          <window.app.icon size={17} />
-          <span>{window.app.name}</span>
+          <openWindow.app.icon size={17} />
+          <span>{openWindow.app.name}</span>
         </div>
         <div className="window-controls">
           <button type="button" aria-label="Minimize" onClick={onMinimize}>
@@ -222,7 +584,7 @@ function DesktopWindow({
         </div>
       </div>
       <div className="window-content">
-        <AppContent app={window.app} />
+        <AppContent app={openWindow.app} openWindows={openWindows} />
       </div>
     </Rnd>
   );
@@ -231,17 +593,17 @@ function DesktopWindow({
 function StartMenu({ onLaunch }: { onLaunch: (app: ThanatosApp) => void }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<AppCategory>('System');
-  const apps = appRegistry.filter((app) => {
-    const inCategory = app.category === category;
-    const matchesQuery = `${app.name} ${app.description}`.toLowerCase().includes(query.toLowerCase());
-    return inCategory && matchesQuery;
-  });
+  const apps = appRegistry.filter((app) => app.category === category && `${app.name} ${app.description}`.toLowerCase().includes(query.toLowerCase()));
 
   return (
     <motion.div className="start-menu" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 18 }}>
+      <div className="start-menu-title">
+        <Skull size={25} />
+        <strong>Death Console</strong>
+      </div>
       <div className="search-row">
         <Search size={16} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search apps" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search the underworld" />
       </div>
       <div className="category-tabs">
         {appCategories.map((item) => (
@@ -297,12 +659,19 @@ export function ThanatosDesktop() {
     <main className="desktop-shell">
       {!booted ? <BootLayer onDone={handleBootDone} /> : null}
       <div className="desktop-wallpaper" />
+      <div className="blood-rain" />
       <div className="crt-overlay" />
+      <SkullFlash />
+      <div className="death-brand">
+        <Skull size={38} />
+        <span>THANATOS</span>
+      </div>
       <div className="window-layer">
         {windows.map((item) => (
           <DesktopWindow
             key={item.id}
-            window={item}
+            openWindow={item}
+            openWindows={windows}
             active={item.id === activeId}
             onFocus={() => patchWindow(item.id, { z: topZ + 1 })}
             onClose={() => setWindows((current) => current.filter((open) => open.id !== item.id))}
@@ -314,7 +683,7 @@ export function ThanatosDesktop() {
       <AnimatePresence>{startOpen ? <StartMenu onLaunch={launch} /> : null}</AnimatePresence>
       <nav className="taskbar">
         <button type="button" className="start-button" onClick={() => setStartOpen((value) => !value)}>
-          <Power size={18} />
+          <Skull size={19} />
           <span>Thanatos</span>
         </button>
         <div className="task-items">

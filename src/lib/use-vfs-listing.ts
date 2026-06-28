@@ -7,31 +7,28 @@ export function useVfsListing(initialPath = '/home/death') {
   const [selectedFile, setSelectedFile] = useState<VfsNode | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(
-    async (path = cwd) => {
-      try {
-        await initializeVfs();
-        const nextListing = await listDirectory(path);
-        setListing(nextListing);
-        setCwd(nextListing.path);
-        setError(null);
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'VFS operation failed.');
-      }
-    },
-    [cwd]
-  );
+  const loadListing = useCallback(async (path: string) => {
+    try {
+      await initializeVfs();
+      const nextListing = await listDirectory(path);
+      setListing(nextListing);
+      setCwd(nextListing.path);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'VFS operation failed.');
+    }
+  }, []);
 
   useEffect(() => {
-    void refresh(initialPath);
-  }, [initialPath, refresh]);
+    void loadListing(initialPath);
+  }, [initialPath, loadListing]);
 
   const openDirectory = useCallback(
     async (path: string) => {
-      await refresh(path);
+      await loadListing(path);
       setSelectedFile(null);
     },
-    [refresh]
+    [loadListing]
   );
 
   const openFile = useCallback(async (path: string) => {
@@ -48,30 +45,30 @@ export function useVfsListing(initialPath = '/home/death') {
     try {
       const stamp = new Date().toISOString().replaceAll(':', '-');
       await writeFile(`${cwd}/note-${stamp}.md`, `# Thanatos Note\n\nCreated at ${stamp}.\n`, 'text/markdown');
-      await refresh(cwd);
+      await loadListing(cwd);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to create file.');
     }
-  }, [cwd, refresh]);
+  }, [cwd, loadListing]);
 
   const createFolder = useCallback(async () => {
     try {
       const stamp = Date.now().toString(36);
       await createDirectory(`${cwd}/folder-${stamp}`);
-      await refresh(cwd);
+      await loadListing(cwd);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to create folder.');
     }
-  }, [cwd, refresh]);
+  }, [cwd, loadListing]);
 
   return {
     cwd,
     listing,
     selectedFile,
     error,
-    refresh,
+    refresh: () => loadListing(cwd),
     openDirectory,
     openFile,
     createDemoFile,
