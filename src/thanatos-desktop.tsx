@@ -37,6 +37,16 @@ type OpenWindow = {
 };
 
 const bloodCommands = ['help', 'status', 'apps', 'date', 'skull', 'clear'];
+const darkQuotes = [
+  'EVERY PROCESS ENDS.',
+  'THE KERNEL REMEMBERS THE DEAD.',
+  'ALL WINDOWS CLOSE EVENTUALLY.',
+  'ROOT WAITS BELOW.',
+  'THE MACHINE BLEEDS IN SILENCE.',
+  'NO DAEMON ESCAPES THE REAPER.',
+  'YOUR SESSION HAS A GRAVE.',
+  'ASH IS JUST MEMORY WITH THE LIGHT REMOVED.'
+];
 
 function AshField() {
   const positions = useMemo(() => {
@@ -85,6 +95,7 @@ function BootLayer({ onDone }: { onDone: () => void }) {
       <Canvas camera={{ position: [0, 0, 8], fov: 55 }}>
         <AshField />
       </Canvas>
+      <div className="boot-sprite" aria-hidden="true" />
       <div className="boot-mark" aria-label="Thanatos OS booting">
         <Skull className="boot-sigil" size={86} />
         <div>
@@ -97,6 +108,41 @@ function BootLayer({ onDone }: { onDone: () => void }) {
         <small>DEATH KERNEL ONLINE</small>
       </div>
     </div>
+  );
+}
+
+function QuoteFlash() {
+  const [quote, setQuote] = useState('');
+
+  useEffect(() => {
+    let clearTimeoutId = 0;
+    const flash = () => {
+      setQuote(darkQuotes[Math.floor(Math.random() * darkQuotes.length)]);
+      window.clearTimeout(clearTimeoutId);
+      clearTimeoutId = window.setTimeout(() => setQuote(''), 2200);
+    };
+    const firstTimeout = window.setTimeout(flash, 1800);
+    const interval = window.setInterval(flash, 6200);
+    return () => {
+      window.clearTimeout(firstTimeout);
+      window.clearTimeout(clearTimeoutId);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  return (
+    <AnimatePresence>
+      {quote ? (
+        <motion.div
+          className="quote-flash"
+          initial={{ opacity: 0, scale: 0.96, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 1.04, y: -8 }}
+        >
+          {quote}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 
@@ -659,8 +705,10 @@ export function ThanatosDesktop() {
     <main className="desktop-shell">
       {!booted ? <BootLayer onDone={handleBootDone} /> : null}
       <div className="desktop-wallpaper" />
+      <div className="sprite-background" aria-hidden="true" />
       <div className="blood-rain" />
       <div className="crt-overlay" />
+      {booted ? <QuoteFlash /> : null}
       <SkullFlash />
       <div className="death-brand">
         <Skull size={38} />

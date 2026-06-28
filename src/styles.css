@@ -85,10 +85,30 @@ input:focus {
   opacity: 0.48;
 }
 
+.sprite-background {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: min(92vw, 92vh);
+  aspect-ratio: 1;
+  image-rendering: pixelated;
+  background-image: url('/assets/thanatos-background.png');
+  background-repeat: no-repeat;
+  background-size: 800% 800%;
+  background-position: 0 0;
+  filter: saturate(1.05) contrast(1.16) brightness(0.58) drop-shadow(0 0 42px rgba(255, 0, 48, 0.22));
+  opacity: 0.54;
+  transform: translate(-50%, -50%);
+  animation: sprite-64 5.8s steps(1, end) infinite;
+}
+
 .blood-rain {
   pointer-events: none;
   position: absolute;
   inset: 0;
+  z-index: 2;
   background:
     linear-gradient(180deg, rgba(255, 0, 32, 0.18), transparent 16%),
     repeating-linear-gradient(90deg, transparent 0 58px, rgba(255, 0, 45, 0.16) 59px, transparent 62px);
@@ -101,6 +121,7 @@ input:focus {
   pointer-events: none;
   position: absolute;
   inset: 0;
+  z-index: 4;
   background:
     repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 2px 5px),
     radial-gradient(circle at 50% 45%, transparent 0 42%, rgba(0, 0, 0, 0.46) 100%);
@@ -122,6 +143,29 @@ input:focus {
   font-size: clamp(2.2rem, 7vw, 6.8rem);
   font-weight: 900;
   text-shadow: 0 0 34px rgba(255, 0, 48, 0.24);
+}
+
+.quote-flash {
+  pointer-events: none;
+  position: fixed;
+  left: 50%;
+  top: 18%;
+  z-index: 930;
+  max-width: min(760px, calc(100vw - 32px));
+  padding: 12px 18px;
+  border: 1px solid rgba(255, 0, 48, 0.32);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.62);
+  color: rgba(255, 219, 210, 0.82);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(0.9rem, 2.8vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-align: center;
+  text-shadow: 0 0 18px rgba(255, 0, 48, 0.68);
+  transform: translateX(-50%);
+  box-shadow: 0 0 46px rgba(255, 0, 48, 0.18), inset 0 0 28px rgba(255, 0, 48, 0.08);
+  mix-blend-mode: screen;
 }
 
 .skull-flash-layer {
@@ -173,6 +217,23 @@ input:focus {
   inset: 0;
 }
 
+.boot-sprite {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(70vw, 70vh);
+  aspect-ratio: 1;
+  image-rendering: pixelated;
+  background-image: url('/assets/lillythanatos-loading.png');
+  background-repeat: no-repeat;
+  background-size: 800% 800%;
+  background-position: 0 0;
+  filter: saturate(1.12) contrast(1.18) brightness(0.72) drop-shadow(0 0 34px rgba(255, 0, 48, 0.45));
+  opacity: 0.62;
+  transform: translate(-50%, -50%);
+  animation: sprite-64 2.15s steps(1, end) infinite;
+}
+
 .boot-mark {
   position: relative;
   display: grid;
@@ -205,6 +266,7 @@ input:focus {
 .window-layer {
   position: absolute;
   inset: 0 0 58px;
+  z-index: 10;
 }
 
 .desktop-window {
@@ -739,6 +801,202 @@ input:focus {
   background: rgba(5, 2, 3, 0.84);
   box-shadow: 0 0 38px rgba(255, 0, 48, 0.12);
   backdrop-filter: blur(18px);
+}
+
+@keyframes sprite-64 {
+  0% {
+    background-position: 0% 0%;
+  }
+  1.5625% {
+    background-position: 14.2857% 0%;
+  }
+  3.125% {
+    background-position: 28.5714% 0%;
+  }
+  4.6875% {
+    background-position: 42.8571% 0%;
+  }
+  6.25% {
+    background-position: 57.1429% 0%;
+  }
+  7.8125% {
+    background-position: 71.4286% 0%;
+  }
+  9.375% {
+    background-position: 85.7143% 0%;
+  }
+  10.9375% {
+    background-position: 100% 0%;
+  }
+  12.5% {
+    background-position: 0% 14.2857%;
+  }
+  14.0625% {
+    background-position: 14.2857% 14.2857%;
+  }
+  15.625% {
+    background-position: 28.5714% 14.2857%;
+  }
+  17.1875% {
+    background-position: 42.8571% 14.2857%;
+  }
+  18.75% {
+    background-position: 57.1429% 14.2857%;
+  }
+  20.3125% {
+    background-position: 71.4286% 14.2857%;
+  }
+  21.875% {
+    background-position: 85.7143% 14.2857%;
+  }
+  23.4375% {
+    background-position: 100% 14.2857%;
+  }
+  25% {
+    background-position: 0% 28.5714%;
+  }
+  26.5625% {
+    background-position: 14.2857% 28.5714%;
+  }
+  28.125% {
+    background-position: 28.5714% 28.5714%;
+  }
+  29.6875% {
+    background-position: 42.8571% 28.5714%;
+  }
+  31.25% {
+    background-position: 57.1429% 28.5714%;
+  }
+  32.8125% {
+    background-position: 71.4286% 28.5714%;
+  }
+  34.375% {
+    background-position: 85.7143% 28.5714%;
+  }
+  35.9375% {
+    background-position: 100% 28.5714%;
+  }
+  37.5% {
+    background-position: 0% 42.8571%;
+  }
+  39.0625% {
+    background-position: 14.2857% 42.8571%;
+  }
+  40.625% {
+    background-position: 28.5714% 42.8571%;
+  }
+  42.1875% {
+    background-position: 42.8571% 42.8571%;
+  }
+  43.75% {
+    background-position: 57.1429% 42.8571%;
+  }
+  45.3125% {
+    background-position: 71.4286% 42.8571%;
+  }
+  46.875% {
+    background-position: 85.7143% 42.8571%;
+  }
+  48.4375% {
+    background-position: 100% 42.8571%;
+  }
+  50% {
+    background-position: 0% 57.1429%;
+  }
+  51.5625% {
+    background-position: 14.2857% 57.1429%;
+  }
+  53.125% {
+    background-position: 28.5714% 57.1429%;
+  }
+  54.6875% {
+    background-position: 42.8571% 57.1429%;
+  }
+  56.25% {
+    background-position: 57.1429% 57.1429%;
+  }
+  57.8125% {
+    background-position: 71.4286% 57.1429%;
+  }
+  59.375% {
+    background-position: 85.7143% 57.1429%;
+  }
+  60.9375% {
+    background-position: 100% 57.1429%;
+  }
+  62.5% {
+    background-position: 0% 71.4286%;
+  }
+  64.0625% {
+    background-position: 14.2857% 71.4286%;
+  }
+  65.625% {
+    background-position: 28.5714% 71.4286%;
+  }
+  67.1875% {
+    background-position: 42.8571% 71.4286%;
+  }
+  68.75% {
+    background-position: 57.1429% 71.4286%;
+  }
+  70.3125% {
+    background-position: 71.4286% 71.4286%;
+  }
+  71.875% {
+    background-position: 85.7143% 71.4286%;
+  }
+  73.4375% {
+    background-position: 100% 71.4286%;
+  }
+  75% {
+    background-position: 0% 85.7143%;
+  }
+  76.5625% {
+    background-position: 14.2857% 85.7143%;
+  }
+  78.125% {
+    background-position: 28.5714% 85.7143%;
+  }
+  79.6875% {
+    background-position: 42.8571% 85.7143%;
+  }
+  81.25% {
+    background-position: 57.1429% 85.7143%;
+  }
+  82.8125% {
+    background-position: 71.4286% 85.7143%;
+  }
+  84.375% {
+    background-position: 85.7143% 85.7143%;
+  }
+  85.9375% {
+    background-position: 100% 85.7143%;
+  }
+  87.5% {
+    background-position: 0% 100%;
+  }
+  89.0625% {
+    background-position: 14.2857% 100%;
+  }
+  90.625% {
+    background-position: 28.5714% 100%;
+  }
+  92.1875% {
+    background-position: 42.8571% 100%;
+  }
+  93.75% {
+    background-position: 57.1429% 100%;
+  }
+  95.3125% {
+    background-position: 71.4286% 100%;
+  }
+  96.875% {
+    background-position: 85.7143% 100%;
+  }
+  98.4375%,
+  100% {
+    background-position: 100% 100%;
+  }
 }
 
 .start-button,
