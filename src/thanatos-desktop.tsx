@@ -85,6 +85,22 @@ const darkQuotes = [
   'ASH IS JUST MEMORY WITH THE LIGHT REMOVED.'
 ];
 
+function readStoredValue(key: string) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredValue(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Storage can be blocked in some hosted browser contexts. Thanatos keeps running without persistence.
+  }
+}
+
 function AshField() {
   const positions = useMemo(() => {
     const points = new Float32Array(900 * 3);
@@ -360,8 +376,8 @@ function CalculatorApp() {
 }
 
 function NotesApp() {
-  const [text, setText] = useState(() => localStorage.getItem('thanatos.notes') ?? 'Blood oath:\n- Build the OS\n- Own the machine\n');
-  const save = () => localStorage.setItem('thanatos.notes', text);
+  const [text, setText] = useState(() => readStoredValue('thanatos.notes') ?? 'Blood oath:\n- Build the OS\n- Own the machine\n');
+  const save = () => writeStoredValue('thanatos.notes', text);
   return (
     <div className="editor-panel">
       <textarea value={text} onChange={(event) => setText(event.target.value)} />
@@ -1143,7 +1159,7 @@ export function ThanatosDesktop() {
   const [windows, setWindows] = useState<OpenWindow[]>([]);
   const [clock, setClock] = useState(() => new Date());
   const [theme, setTheme] = useState<ThanatosTheme>(() => {
-    const stored = localStorage.getItem('thanatos.theme');
+    const stored = readStoredValue('thanatos.theme');
     return stored === 'death' || stored === 'zombitious' || stored === 'lilly' ? stored : 'lilly';
   });
   const handleBootDone = useCallback(() => setBooted(true), []);
@@ -1155,7 +1171,7 @@ export function ThanatosDesktop() {
 
   const changeTheme = useCallback((nextTheme: ThanatosTheme) => {
     setTheme(nextTheme);
-    localStorage.setItem('thanatos.theme', nextTheme);
+    writeStoredValue('thanatos.theme', nextTheme);
   }, []);
 
   const topZ = windows.reduce((max, item) => Math.max(max, item.z), 10);

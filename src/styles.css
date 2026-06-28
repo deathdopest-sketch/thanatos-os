@@ -25,6 +25,49 @@ body {
   overflow: hidden;
 }
 
+#root {
+  min-height: 100vh;
+}
+
+.fatal-shell {
+  display: grid;
+  width: 100vw;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 0, 48, 0.24), transparent 28%),
+    #030101;
+}
+
+.fatal-shell section {
+  display: grid;
+  max-width: 640px;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid rgba(255, 47, 88, 0.34);
+  border-radius: 7px;
+  background: rgba(8, 2, 4, 0.9);
+  box-shadow: 0 0 44px rgba(255, 0, 48, 0.18);
+}
+
+.fatal-shell strong {
+  color: #ff315e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+}
+
+.fatal-shell p,
+.fatal-shell code {
+  margin: 0;
+  color: #fff4ec;
+}
+
+.fatal-shell code {
+  overflow-wrap: anywhere;
+  color: #c6b7aa;
+}
+
 button,
 input,
 textarea {
