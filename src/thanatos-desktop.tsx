@@ -515,6 +515,9 @@ function ColorPickerApp() {
 function MumbleChatApp() {
   const [frameKey, setFrameKey] = useState(0);
   const [frameLoaded, setFrameLoaded] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(true);
+  const [bridgeOpen, setBridgeOpen] = useState(false);
   const thanatosOrigin = window.location.origin;
   const [stats, setStats] = useState<MumbleChatStats>({
     loggedIn: null,
@@ -630,6 +633,15 @@ function MumbleChatApp() {
         <button type="button" onClick={requestStats}>
           <RefreshCcw size={15} /> Live Stats
         </button>
+        <button type="button" onClick={() => setStatsOpen((value) => !value)}>
+          {statsOpen ? 'Hide Stats' : 'Stats'}
+        </button>
+        <button type="button" onClick={() => setFocusMode((value) => !value)}>
+          {focusMode ? 'Exit Focus' : 'Focus'}
+        </button>
+        <button type="button" onClick={() => setBridgeOpen((value) => !value)}>
+          Bridge
+        </button>
         <button type="button" onClick={reloadFrame}>
           <RefreshCcw size={15} /> Reload
         </button>
@@ -637,12 +649,14 @@ function MumbleChatApp() {
           <Globe size={15} /> Open Site
         </a>
       </div>
-      <div className="mumblechat-bridge-note">
-        <strong>Bridge Origin</strong>
-        <code>THANATOS_ORIGIN={thanatosOrigin}</code>
-        <span>For deployed stats, Render must use the real Thanatos URL. Localhost only works with a local MumbleChat dev server or a matching dev allowlist.</span>
-      </div>
-      <div className="mumblechat-layout">
+      {bridgeOpen ? (
+        <div className="mumblechat-bridge-note">
+          <strong>Bridge Origin</strong>
+          <code>THANATOS_ORIGIN={thanatosOrigin}</code>
+          <span>For deployed stats, Render must use the real Thanatos URL. Localhost only works with a local MumbleChat dev server or a matching dev allowlist.</span>
+        </div>
+      ) : null}
+      <div className={clsx('mumblechat-layout', statsOpen && 'stats-open', focusMode && !statsOpen && 'focus-mode')}>
         <iframe
           key={frameKey}
           id="mumblechat-frame"
@@ -652,34 +666,36 @@ function MumbleChatApp() {
           sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
           onLoad={handleFrameLoad}
         />
-        <aside className="mumblechat-stats">
-          <h3>Live Stats</h3>
-          <div className={`status-orb ${stats.status}`} />
-          <div className="mumblechat-profile">
-            {stats.avatarUrl ? <img src={stats.avatarUrl} alt="" referrerPolicy="no-referrer" /> : <div>{(stats.displayName ?? stats.username ?? '?').slice(0, 1)}</div>}
-            <span>{stats.displayName ?? stats.username ?? 'Unknown user'}</span>
-          </div>
-          <dl>
-            <dt>Login</dt>
-            <dd>{stats.loggedIn === null ? 'unknown' : stats.loggedIn ? 'logged in' : 'logged out'}</dd>
-            <dt>User ID</dt>
-            <dd>{stats.userId ?? 'unknown'}</dd>
-            <dt>Username</dt>
-            <dd>{stats.username ?? 'unknown'}</dd>
-            <dt>Unread PMs</dt>
-            <dd>{stats.unreadPms === null ? 'unknown' : stats.unreadPms}</dd>
-            <dt>Total Friends</dt>
-            <dd>{stats.totalFriends === null ? 'unknown' : stats.totalFriends}</dd>
-            <dt>Online Friends</dt>
-            <dd>{stats.onlineFriends.length ? stats.onlineFriends.join(', ') : 'unknown'}</dd>
-            <dt>Offline Friends</dt>
-            <dd>{stats.offlineFriends.length ? stats.offlineFriends.join(', ') : 'unknown'}</dd>
-            <dt>Updated</dt>
-            <dd>{stats.lastUpdated ?? 'never'}</dd>
-          </dl>
-          <p>{stats.message}</p>
-          <code>{frameLoaded ? 'iframe: loaded' : 'iframe: loading'} | postMessage: mumblechat:stats</code>
-        </aside>
+        {statsOpen ? (
+          <aside className="mumblechat-stats">
+            <h3>Live Stats</h3>
+            <div className={`status-orb ${stats.status}`} />
+            <div className="mumblechat-profile">
+              {stats.avatarUrl ? <img src={stats.avatarUrl} alt="" referrerPolicy="no-referrer" /> : <div>{(stats.displayName ?? stats.username ?? '?').slice(0, 1)}</div>}
+              <span>{stats.displayName ?? stats.username ?? 'Unknown user'}</span>
+            </div>
+            <dl>
+              <dt>Login</dt>
+              <dd>{stats.loggedIn === null ? 'unknown' : stats.loggedIn ? 'logged in' : 'logged out'}</dd>
+              <dt>User ID</dt>
+              <dd>{stats.userId ?? 'unknown'}</dd>
+              <dt>Username</dt>
+              <dd>{stats.username ?? 'unknown'}</dd>
+              <dt>Unread PMs</dt>
+              <dd>{stats.unreadPms === null ? 'unknown' : stats.unreadPms}</dd>
+              <dt>Total Friends</dt>
+              <dd>{stats.totalFriends === null ? 'unknown' : stats.totalFriends}</dd>
+              <dt>Online Friends</dt>
+              <dd>{stats.onlineFriends.length ? stats.onlineFriends.join(', ') : 'unknown'}</dd>
+              <dt>Offline Friends</dt>
+              <dd>{stats.offlineFriends.length ? stats.offlineFriends.join(', ') : 'unknown'}</dd>
+              <dt>Updated</dt>
+              <dd>{stats.lastUpdated ?? 'never'}</dd>
+            </dl>
+            <p>{stats.message}</p>
+            <code>{frameLoaded ? 'iframe: loaded' : 'iframe: loading'} | postMessage: mumblechat:stats</code>
+          </aside>
+        ) : null}
       </div>
     </div>
   );
@@ -1075,7 +1091,7 @@ function DesktopWindow({
 }) {
   if (openWindow.minimized) return null;
 
-  const size = openWindow.maximized ? { width: 'calc(100vw - 24px)', height: 'calc(100vh - 86px)' } : { width: openWindow.width, height: openWindow.height };
+  const size = openWindow.maximized ? { width: Math.max(360, window.innerWidth - 24), height: Math.max(260, window.innerHeight - 86) } : { width: openWindow.width, height: openWindow.height };
   const position = openWindow.maximized ? { x: 12, y: 12 } : { x: openWindow.x, y: openWindow.y };
 
   return (
@@ -1185,6 +1201,8 @@ export function ThanatosDesktop() {
       }
       const id = nanoid();
       const placementSeed = Array.from(id).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+      const defaultWidth = app.id === 'mumblechat' ? Math.min(1160, window.innerWidth - 48) : 760;
+      const defaultHeight = app.id === 'mumblechat' ? Math.min(760, window.innerHeight - 112) : 500;
       return [
         ...current,
         {
@@ -1192,11 +1210,11 @@ export function ThanatosDesktop() {
           app,
           z: topZ + 1,
           minimized: false,
-          maximized: false,
-          x: 58 + (placementSeed % 7) * 28,
-          y: 44 + (placementSeed % 5) * 24,
-          width: 760,
-          height: 500
+          maximized: app.id === 'mumblechat',
+          x: app.id === 'mumblechat' ? Math.max(18, (window.innerWidth - defaultWidth) / 2) : 58 + (placementSeed % 7) * 28,
+          y: app.id === 'mumblechat' ? 18 : 44 + (placementSeed % 5) * 24,
+          width: defaultWidth,
+          height: defaultHeight
         }
       ];
     });
