@@ -12,6 +12,7 @@ import {
   Folder,
   FolderPlus,
   Globe,
+  LogIn,
   Lock,
   Maximize2,
   Minus,
@@ -498,6 +499,7 @@ function ColorPickerApp() {
 function MumbleChatApp() {
   const [frameKey, setFrameKey] = useState(0);
   const [frameLoaded, setFrameLoaded] = useState(false);
+  const thanatosOrigin = window.location.origin;
   const [stats, setStats] = useState<MumbleChatStats>({
     loggedIn: null,
     userId: null,
@@ -510,7 +512,7 @@ function MumbleChatApp() {
     totalFriends: null,
     lastUpdated: null,
     status: 'idle',
-    message: 'Sign into MumbleChat inside this window. Thanatos polls the approved bridge every 30 seconds after the frame loads.'
+    message: 'Sign into MumbleChat in the real site tab, then return here and poll the approved bridge. Local Thanatos only works when MumbleChat allows this exact origin.'
   });
 
   useEffect(() => {
@@ -590,13 +592,25 @@ function MumbleChatApp() {
     setStats((current) => ({
       ...current,
       status: 'idle',
-      message: 'Reloading MumbleChat. Sign in inside the iframe if needed.'
+      message: 'Reloading the MumbleChat bridge frame. Sign in on the real site tab first if needed.'
+    }));
+  };
+
+  const openLogin = () => {
+    window.open('https://mumblechat.online', 'thanatos-mumblechat-login', 'noopener,noreferrer,width=1120,height=820');
+    setStats((current) => ({
+      ...current,
+      status: 'idle',
+      message: 'MumbleChat opened in a real site window. Sign in there, come back to Thanatos, then press Reload and Live Stats.'
     }));
   };
 
   return (
     <div className="mumblechat-app">
       <div className="mumblechat-toolbar">
+        <button type="button" className="primary-action" onClick={openLogin}>
+          <LogIn size={15} /> Sign In
+        </button>
         <button type="button" onClick={requestStats}>
           <RefreshCcw size={15} /> Live Stats
         </button>
@@ -606,6 +620,11 @@ function MumbleChatApp() {
         <a href="https://mumblechat.online" target="_blank" rel="noreferrer">
           <Globe size={15} /> Open Site
         </a>
+      </div>
+      <div className="mumblechat-bridge-note">
+        <strong>Bridge Origin</strong>
+        <code>THANATOS_ORIGIN={thanatosOrigin}</code>
+        <span>For deployed stats, Render must use the real Thanatos URL. Localhost only works with a local MumbleChat dev server or a matching dev allowlist.</span>
       </div>
       <div className="mumblechat-layout">
         <iframe
