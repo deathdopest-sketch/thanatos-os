@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Rnd } from 'react-rnd';
 import gsap from 'gsap';
@@ -99,6 +99,15 @@ function writeStoredValue(key: string, value: string) {
   } catch {
     // Storage can be blocked in some hosted browser contexts. Thanatos keeps running without persistence.
   }
+}
+
+function randomToken(length: number, alphabet = 'abcdefghijkmnopqrstuvwxyz23456789') {
+  const values = crypto.getRandomValues(new Uint32Array(length));
+  return Array.from(values, (value) => alphabet[value % alphabet.length]).join('');
+}
+
+function makeObjectUrl(file: File | null) {
+  return file ? URL.createObjectURL(file) : '';
 }
 
 function AshField() {
@@ -440,18 +449,103 @@ function HashGeneratorApp() {
 }
 
 function PasswordGeneratorApp() {
-  const [password, setPassword] = useState('');
-  const generate = () => {
+  type VaultEntry = {
+    id: string;
+    service: string;
+    email: string;
+    username: string;
+    password: string;
+    createdAt: string;
+  };
+  const [service, setService] = useState('new-service');
+  const [domain, setDomain] = useState('proton.me');
+  const [entry, setEntry] = useState<VaultEntry | null>(null);
+  const [vault, setVault] = useState<VaultEntry[]>(() => {
+    try {
+      return JSON.parse(readStoredValue('thanatos.accountVault') ?? '[]') as VaultEntry[];
+    } catch {
+      return [];
+    }
+  });
+  const persistVault = (nextVault: VaultEntry[]) => {
+    setVault(nextVault);
+    writeStoredValue('thanatos.accountVault', JSON.stringify(nextVault));
+  };
+  const generatePassword = () => {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
-    const values = crypto.getRandomValues(new Uint32Array(24));
-    setPassword(Array.from(values, (value) => alphabet[value % alphabet.length]).join(''));
+    return randomToken(24, alphabet);
+  };
+  const generate = () => {
+    const normalizedService = service.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'account';
+    const username = `${normalizedService}-${randomToken(5)}`;
+    const nextEntry: VaultEntry = {
+      id: nanoid(),
+      service: normalizedService,
+      email: `${normalizedService}.${randomToken(8)}@${domain.trim() || 'proton.me'}`,
+      username,
+      password: generatePassword(),
+      createdAt: new Date().toLocaleString()
+    };
+    setEntry(nextEntry);
+  };
+  const save = () => {
+    if (!entry) return;
+    persistVault([entry, ...vault.filter((item) => item.id !== entry.id)]);
+  };
+  const remove = (id: string) => persistVault(vault.filter((item) => item.id !== id));
+  const copyKit = async (item = entry) => {
+    if (!item) return;
+    await navigator.clipboard?.writeText(`service=${item.service}\nemail=${item.email}\nusername=${item.username}\npassword=${item.password}`);
   };
   return (
-    <div className="tool-panel">
-      <button type="button" onClick={generate}>
-        <RefreshCcw size={15} /> Generate 24-char key
-      </button>
-      <code>{password || 'press generate'}</code>
+    <div className="account-vault">
+      <div className="account-generator">
+        <label>
+          Service
+          <input value={service} onChange={(event) => setService(event.target.value)} placeholder="mumblechat" />
+        </label>
+        <label>
+          Email domain
+          <input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="proton.me" />
+        </label>
+        <button type="button" onClick={generate}>
+          <RefreshCcw size={15} /> Generate account kit
+        </button>
+      </div>
+      <div className="account-kit">
+        <strong>{entry ? entry.service : 'No account kit generated'}</strong>
+        <code>{entry ? `email: ${entry.email}` : 'email waits here'}</code>
+        <code>{entry ? `user: ${entry.username}` : 'username waits here'}</code>
+        <code>{entry ? `pass: ${entry.password}` : 'password waits here'}</code>
+        <div className="account-actions">
+          <button type="button" onClick={save} disabled={!entry}>
+            <Save size={15} /> Save to vault
+          </button>
+          <button type="button" onClick={() => void copyKit()} disabled={!entry}>
+            Copy kit
+          </button>
+        </div>
+      </div>
+      <div className="vault-list">
+        {vault.length ? (
+          vault.map((item) => (
+            <div key={item.id} className="vault-row">
+              <strong>{item.service}</strong>
+              <span>{item.email}</span>
+              <code>{item.password}</code>
+              <small>{item.createdAt}</small>
+              <button type="button" onClick={() => void copyKit(item)}>
+                Copy
+              </button>
+              <button type="button" onClick={() => remove(item.id)}>
+                <X size={14} />
+              </button>
+            </div>
+          ))
+        ) : (
+          <p>Saved account kits stay in this browser only.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -508,6 +602,220 @@ function ColorPickerApp() {
       <input type="color" value={color} onChange={(event) => setColor(event.target.value)} />
       <div style={{ background: color }} />
       <code>{color}</code>
+    </div>
+  );
+}
+
+function LocalMediaApp({ kind }: { kind: 'music' | 'video' | 'image' | 'pdf' }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [url, setUrl] = useState('');
+  const accept = kind === 'music' ? 'audio/*' : kind === 'video' ? 'video/*' : kind === 'image' ? 'image/*' : 'application/pdf';
+  const label = kind === 'music' ? 'audio file' : kind === 'video' ? 'video file' : kind === 'image' ? 'image file' : 'PDF file';
+
+  useEffect(() => {
+    const nextUrl = makeObjectUrl(file);
+    setUrl(nextUrl);
+    return () => {
+      if (nextUrl) URL.revokeObjectURL(nextUrl);
+    };
+  }, [file]);
+
+  return (
+    <div className="media-tool">
+      <label className="media-picker">
+        Open {label}
+        <input type="file" accept={accept} onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+      </label>
+      <div className="media-stage">
+        {!url ? <p>Select a local {label} to preview it inside Thanatos.</p> : null}
+        {kind === 'music' && url ? <audio src={url} controls /> : null}
+        {kind === 'video' && url ? <video src={url} controls /> : null}
+        {kind === 'image' && url ? <img src={url} alt={file?.name ?? 'Selected image'} /> : null}
+        {kind === 'pdf' && url ? <iframe src={url} title={file?.name ?? 'Selected PDF'} /> : null}
+      </div>
+      <code>{file ? `${file.name} / ${Math.round(file.size / 1024)} KB` : 'no file selected'}</code>
+    </div>
+  );
+}
+
+function CameraApp() {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [photo, setPhoto] = useState('');
+  const [status, setStatus] = useState('Camera idle. Permission is requested only when you start it.');
+
+  const stop = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setStatus('Camera stopped.');
+  }, []);
+
+  useEffect(() => stop, [stop]);
+
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setStatus('Camera active.');
+    } catch (caught) {
+      setStatus(caught instanceof Error ? caught.message : 'Camera failed.');
+    }
+  };
+
+  const capture = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0);
+    setPhoto(canvas.toDataURL('image/png'));
+  };
+
+  return (
+    <div className="camera-app">
+      <video ref={videoRef} autoPlay playsInline muted />
+      {photo ? <img src={photo} alt="Camera capture" /> : null}
+      <div className="media-actions">
+        <button type="button" onClick={start}>
+          <Play size={15} /> Start
+        </button>
+        <button type="button" onClick={capture}>
+          Capture
+        </button>
+        <button type="button" onClick={stop}>
+          <X size={15} /> Stop
+        </button>
+      </div>
+      <p>{status}</p>
+    </div>
+  );
+}
+
+function VoiceRecorderApp() {
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [audioUrl, setAudioUrl] = useState('');
+  const [status, setStatus] = useState('Recorder idle.');
+
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setAudioUrl(URL.createObjectURL(blob));
+        setStatus(`Recording ready / ${Math.round(blob.size / 1024)} KB`);
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+      setStatus('Recording...');
+    } catch (caught) {
+      setStatus(caught instanceof Error ? caught.message : 'Recorder failed.');
+    }
+  };
+
+  const stop = () => {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+  };
+
+  return (
+    <div className="recorder-app">
+      <div className="media-actions">
+        <button type="button" onClick={start} disabled={recording}>
+          <Play size={15} /> Record
+        </button>
+        <button type="button" onClick={stop} disabled={!recording}>
+          <X size={15} /> Stop
+        </button>
+      </div>
+      {audioUrl ? <audio src={audioUrl} controls /> : null}
+      <p>{status}</p>
+    </div>
+  );
+}
+
+function PaintApp() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRef = useRef(false);
+  const [color, setColor] = useState('#ff315e');
+  const [downloadUrl, setDownloadUrl] = useState('#');
+
+  const refreshDownload = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setDownloadUrl(canvas.toDataURL('image/png'));
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    canvas.width = 1100;
+    canvas.height = 700;
+    context.fillStyle = '#060203';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    refreshDownload();
+  }, [refreshDownload]);
+
+  const draw = (event: PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context || !drawingRef.current) return;
+    const rect = canvas.getBoundingClientRect();
+    context.fillStyle = color;
+    context.beginPath();
+    context.arc(((event.clientX - rect.left) / rect.width) * canvas.width, ((event.clientY - rect.top) / rect.height) * canvas.height, 8, 0, Math.PI * 2);
+    context.fill();
+  };
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    context.fillStyle = '#060203';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    refreshDownload();
+  };
+
+  return (
+    <div className="paint-app">
+      <canvas
+        ref={canvasRef}
+        onPointerDown={(event) => {
+          drawingRef.current = true;
+          draw(event);
+        }}
+        onPointerMove={draw}
+        onPointerUp={() => {
+          drawingRef.current = false;
+          refreshDownload();
+        }}
+        onPointerLeave={() => {
+          drawingRef.current = false;
+          refreshDownload();
+        }}
+      />
+      <div className="media-actions">
+        <input type="color" value={color} onChange={(event) => setColor(event.target.value)} />
+        <button type="button" onClick={clear}>
+          Clear
+        </button>
+        <a href={downloadUrl} download="thanatos-paint.png">
+          Save PNG
+        </a>
+      </div>
     </div>
   );
 }
@@ -1094,6 +1402,13 @@ function AppContent({
   if (app.id === 'base64') return <Base64App />;
   if (app.id === 'regex') return <RegexTesterApp />;
   if (app.id === 'colors') return <ColorPickerApp />;
+  if (app.id === 'music') return <LocalMediaApp kind="music" />;
+  if (app.id === 'video') return <LocalMediaApp kind="video" />;
+  if (app.id === 'image') return <LocalMediaApp kind="image" />;
+  if (app.id === 'pdf') return <LocalMediaApp kind="pdf" />;
+  if (app.id === 'camera') return <CameraApp />;
+  if (app.id === 'recorder') return <VoiceRecorderApp />;
+  if (app.id === 'paint') return <PaintApp />;
   if (app.id === 'visualizer') return <AudioVisualizerApp theme={theme} />;
   return <GenericWorkingApp app={app} />;
 }
