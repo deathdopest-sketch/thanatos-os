@@ -714,9 +714,12 @@ type MatrixCell = {
   id: number;
   type: 'data' | 'sprite' | 'logo' | 'status' | 'meter';
   label: string;
+  row: number;
+  column: number;
   spriteX: number;
   spriteY: number;
   pulse: number;
+  sequence: 'header' | 'acrobat' | 'ignition' | 'flame' | 'ascension' | 'sealed';
 };
 
 type MatrixStyle = CSSProperties & {
@@ -724,12 +727,15 @@ type MatrixStyle = CSSProperties & {
   '--matrix-ghost': string;
   '--matrix-shadow': string;
   '--matrix-accent': string;
+  '--matrix-phase': string;
 };
 
 type MatrixCellStyle = CSSProperties & {
   '--sprite-x': string;
   '--sprite-y': string;
   '--cell-pulse': string;
+  '--row-index': string;
+  '--col-index': string;
   '--meter-level'?: string;
 };
 
@@ -767,14 +773,18 @@ const matrixCells: MatrixCell[] = Array.from({ length: 100 }, (_, index) => {
   const dataColumn = column === 0 || column === 9 || id % 13 === 0;
   const type: MatrixCell['type'] = logoBand ? 'logo' : meterColumn ? 'meter' : isHeader || isFooter || dataColumn ? 'data' : row >= 7 ? 'status' : 'sprite';
   const label = logoBand ? 'THANATOS OS' : matrixLabels[(id + row + column) % matrixLabels.length];
+  const sequence: MatrixCell['sequence'] = isHeader ? 'header' : row <= 2 ? 'acrobat' : row <= 4 ? 'ignition' : row <= 6 ? 'flame' : row <= 8 ? 'ascension' : 'sealed';
 
   return {
     id,
     type,
     label,
+    row,
+    column,
     spriteX: column,
     spriteY: row,
-    pulse: ((id * 17) % 100) / 100
+    pulse: ((id * 17) % 100) / 100,
+    sequence
   };
 });
 
@@ -797,13 +807,16 @@ function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
   const [status, setStatus] = useState('Choose a browser tab, screen, or app window and enable audio sharing.');
   const [active, setActive] = useState(false);
   const [level, setLevel] = useState(0);
+  const [matrixFrame, setMatrixFrame] = useState(0);
   const [matrixState, setMatrixState] = useState<MatrixState>('idle');
+  const lastUiFrameRef = useRef(0);
   const palette = getVisualizerPalette(theme);
   const visualizerStyle: MatrixStyle = {
     '--matrix-flame': palette.flame.join(', '),
     '--matrix-ghost': palette.ghost.join(', '),
     '--matrix-shadow': palette.shadow.join(', '),
-    '--matrix-accent': palette.accent.join(', ')
+    '--matrix-accent': palette.accent.join(', '),
+    '--matrix-phase': `${matrixFrame}`
   };
 
   const stop = useCallback((nextState: MatrixState = 'idle') => {
@@ -814,6 +827,7 @@ function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
     contextRef.current = null;
     setActive(false);
     setLevel(0);
+    setMatrixFrame(0);
     setMatrixState(nextState);
     document.documentElement.style.setProperty('--audio-level', '0');
     document.documentElement.style.setProperty('--audio-bass', '0');
@@ -866,6 +880,11 @@ function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
         document.documentElement.style.setProperty('--audio-level', intensity.toFixed(3));
         document.documentElement.style.setProperty('--audio-bass', bass.toFixed(3));
         document.documentElement.style.setProperty('--audio-mid', mid.toFixed(3));
+        const now = performance.now();
+        if (now - lastUiFrameRef.current > 76) {
+          lastUiFrameRef.current = now;
+          setMatrixFrame((frame) => (frame + 1 + Math.round(bass * 3)) % 100);
+        }
 
         rafRef.current = window.requestAnimationFrame(draw);
       };
@@ -882,15 +901,28 @@ function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
       <div className={`thanatos-matrix matrix-${matrixState}`} aria-label="REAPER_OS BIOSYNC matrix">
         {matrixCells.map((cell) => {
           const meterLevel = cell.type === 'meter' ? Math.min(1, level + cell.pulse * 0.18) : undefined;
+          const spriteX = (cell.spriteX + matrixFrame + cell.row * 2) % 10;
+          const spriteY = (cell.spriteY + Math.floor(matrixFrame / 10) + cell.column) % 10;
           const cellStyle: MatrixCellStyle = {
-            '--sprite-x': `${cell.spriteX}`,
-            '--sprite-y': `${cell.spriteY}`,
+            '--sprite-x': `${spriteX}`,
+            '--sprite-y': `${spriteY}`,
             '--cell-pulse': `${cell.pulse}`,
+            '--row-index': `${cell.row}`,
+            '--col-index': `${cell.column}`,
             ...(meterLevel === undefined ? {} : { '--meter-level': `${meterLevel}` })
           };
 
           return (
-            <div key={cell.id} className={clsx('matrix-cell', `matrix-${cell.type}`, (cell.type === 'data' || cell.type === 'status' || cell.type === 'logo') && 'data-text-cell')} style={cellStyle}>
+            <div
+              key={cell.id}
+              className={clsx(
+                'matrix-cell',
+                `matrix-${cell.type}`,
+                `matrix-seq-${cell.sequence}`,
+                (cell.type === 'data' || cell.type === 'status' || cell.type === 'logo') && 'data-text-cell'
+              )}
+              style={cellStyle}
+            >
               {cell.type === 'sprite' ? <div className="matrix-sprite" /> : null}
               {cell.type === 'meter' ? <div className="matrix-meter" /> : null}
               <span>{getMatrixCellText(cell, level, matrixState)}</span>
