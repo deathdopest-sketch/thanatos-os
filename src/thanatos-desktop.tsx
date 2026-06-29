@@ -259,6 +259,27 @@ function mdToHtml(input: string) {
 
 const cp = (text: string) => void navigator.clipboard.writeText(text);
 
+function readStoredValue(key: string) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredValue(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Thanatos still works when browser storage is blocked.
+  }
+}
+
+function randomToken(length: number, alphabet = 'abcdefghijkmnopqrstuvwxyz23456789') {
+  const values = crypto.getRandomValues(new Uint32Array(length));
+  return Array.from(values, (value) => alphabet[value % alphabet.length]).join('');
+}
+
 // ─── system apps ──────────────────────────────────────────────────────────────
 
 function TerminalApp({ openWindows }: { openWindows: OpenWindow[] }) {
@@ -917,21 +938,132 @@ function HashGeneratorApp() {
 }
 
 function PasswordGeneratorApp() {
-  const [pw, setPw] = useState('');
-  const [len, setLen] = useState(24);
-  const gen = () => {
-    const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
-    const v = crypto.getRandomValues(new Uint32Array(len));
-    setPw(Array.from(v, (n) => a[n % a.length]).join(''));
+  type VaultEntry = {
+    id: string;
+    service: string;
+    email: string;
+    username: string;
+    password: string;
+    createdAt: string;
   };
+
+  const [service, setService] = useState('mumblechat-work');
+  const [domain, setDomain] = useState('mumblechat.online');
+  const [localPart, setLocalPart] = useState('');
+  const [entry, setEntry] = useState<VaultEntry | null>(null);
+  const [vault, setVault] = useState<VaultEntry[]>(() => {
+    try {
+      return JSON.parse(readStoredValue('thanatos.accountVault') ?? '[]') as VaultEntry[];
+    } catch {
+      return [];
+    }
+  });
+
+  const persistVault = (nextVault: VaultEntry[]) => {
+    setVault(nextVault);
+    writeStoredValue('thanatos.accountVault', JSON.stringify(nextVault));
+  };
+
+  const generatePassword = () => {
+    const a = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
+    return randomToken(28, a);
+  };
+
+  const normalize = (value: string, fallback: string) => value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || fallback;
+
+  const generate = () => {
+    const normalizedService = normalize(service, 'account');
+    const normalizedDomain = domain.trim().toLowerCase().replace(/^@/, '') || 'mumblechat.online';
+    const generatedLocal = localPart.trim()
+      ? normalize(localPart, normalizedService)
+      : `${normalizedService}.${randomToken(6)}`;
+    const nextEntry: VaultEntry = {
+      id: nanoid(),
+      service: normalizedService,
+      email: `${generatedLocal}@${normalizedDomain}`,
+      username: `${normalizedService}-${randomToken(5)}`,
+      password: generatePassword(),
+      createdAt: new Date().toLocaleString()
+    };
+    setEntry(nextEntry);
+  };
+
+  const save = () => {
+    if (!entry) return;
+    persistVault([entry, ...vault.filter((item) => item.id !== entry.id)]);
+  };
+
+  const remove = (id: string) => persistVault(vault.filter((item) => item.id !== id));
+
+  const copyKit = (item = entry) => {
+    if (!item) return;
+    cp(`service=${item.service}\nemail=${item.email}\nusername=${item.username}\npassword=${item.password}`);
+  };
+
   return (
-    <div className="tool-panel">
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input type="number" value={len} min={8} max={64} onChange={(e) => setLen(Number(e.target.value))} style={{ width: 64 }} />
-        <button type="button" onClick={gen}><RefreshCcw size={15} /> Generate</button>
+    <div className="account-vault">
+      <div className="account-generator">
+        <label>
+          Service
+          <input value={service} onChange={(event) => setService(event.target.value)} placeholder="new-staff-account" />
+        </label>
+        <label>
+          Mail domain
+          <input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="mumblechat.online" />
+        </label>
+        <label>
+          Email name
+          <input value={localPart} onChange={(event) => setLocalPart(event.target.value)} placeholder="blank = auto alias" />
+        </label>
+        <button type="button" onClick={generate}>
+          <RefreshCcw size={15} /> Generate account kit
+        </button>
       </div>
-      <code style={{ wordBreak: 'break-all', padding: 12 }}>{pw || 'press generate'}</code>
-      {pw && <button type="button" onClick={() => cp(pw)}><Copy size={15} /> Copy</button>}
+
+      <div className="account-kit">
+        <strong>{entry ? entry.service : 'No account kit generated'}</strong>
+        <code>{entry ? `email: ${entry.email}` : 'email waits here'}</code>
+        <code>{entry ? `user: ${entry.username}` : 'username waits here'}</code>
+        <code>{entry ? `pass: ${entry.password}` : 'password waits here'}</code>
+        <div className="account-actions">
+          <button type="button" onClick={save} disabled={!entry}>
+            <Save size={15} /> Save to vault
+          </button>
+          <button type="button" onClick={() => copyKit()} disabled={!entry}>
+            <Copy size={15} /> Copy kit
+          </button>
+        </div>
+        <small>Real mailbox creation comes next after DNS points mail.mumblechat.online at the OVH VPS.</small>
+      </div>
+
+      <div className="mail-dns-card">
+        <strong>Mail server DNS for Porkbun</strong>
+        <code>A    mail    139.99.200.187</code>
+        <code>MX   @       mail.mumblechat.online    priority 10</code>
+        <code>TXT  @       v=spf1 mx -all</code>
+        <code>{'PTR  139.99.200.187 -> mail.mumblechat.online in OVH'}</code>
+      </div>
+
+      <div className="vault-list">
+        {vault.length ? vault.map((item) => (
+          <div key={item.id} className="vault-row">
+            <strong>{item.service}</strong>
+            <span>{item.email}</span>
+            <code>{item.password}</code>
+            <small>{item.createdAt}</small>
+            <button type="button" onClick={() => copyKit(item)}>
+              <Copy size={14} /> Copy
+            </button>
+            <button type="button" onClick={() => remove(item.id)} aria-label={`Delete ${item.service}`}>
+              <X size={14} />
+            </button>
+          </div>
+        )) : <p>Saved account kits stay in this browser until the Mailu bridge is wired.</p>}
+      </div>
     </div>
   );
 }

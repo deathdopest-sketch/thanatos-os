@@ -2557,6 +2557,119 @@ body {
 }
 
 /* ── Password Generator ──────────────────────────────────────────── */
+.account-vault {
+  flex: 1;
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.account-generator {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.account-generator label {
+  display: grid;
+  gap: 6px;
+  color: rgba(247, 238, 233, 0.55);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.account-generator input {
+  height: 38px;
+}
+
+.account-kit,
+.mail-dns-card,
+.vault-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(var(--curse-primary), 0.22);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgba(var(--curse-primary), 0.11), transparent 44%),
+    rgba(4, 2, 3, 0.72);
+}
+
+.account-kit strong,
+.mail-dns-card strong,
+.vault-row strong {
+  color: rgb(var(--curse-primary));
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+}
+
+.account-kit code,
+.mail-dns-card code,
+.vault-row code {
+  overflow: hidden;
+  color: #f8e4d6;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-kit small,
+.vault-row small,
+.vault-list p {
+  margin: 0;
+  color: rgba(247, 238, 233, 0.48);
+  font-size: 11px;
+}
+
+.account-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vault-list {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--curse-primary), 0.3) transparent;
+}
+
+.vault-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.vault-row span,
+.vault-row code,
+.vault-row small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 920px) {
+  .account-generator {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .account-generator button {
+    grid-column: 1 / -1;
+  }
+}
+
 .pass-app {
   flex: 1;
   display: flex;
