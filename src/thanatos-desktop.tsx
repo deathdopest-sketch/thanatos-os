@@ -31,7 +31,6 @@ import {
   Eye,
   File,
   FilePlus2,
-  FileText,
   Fingerprint,
   Folder,
   FolderOpen,
@@ -42,7 +41,6 @@ import {
   Lock,
   Mail,
   Maximize2,
-  MessageCircle,
   Mic,
   Minus,
   Music,
@@ -55,13 +53,10 @@ import {
   Save,
   Search,
   Send,
-  Settings,
   ShieldCheck,
   Shuffle,
   Skull,
   Square,
-  StickyNote,
-  TerminalSquare,
   Wand2,
   Wifi,
   X
@@ -74,8 +69,18 @@ import { useVfsListing } from './lib/use-vfs-listing';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-type OpenWindow = { id: string; app: ThanatosApp; z: number; minimized: boolean; maximized: boolean };
-type ThanatosTheme = 'lilly' | 'death' | 'zombitious';
+type OpenWindow = {
+  id: string;
+  app: ThanatosApp;
+  z: number;
+  minimized: boolean;
+  maximized: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+type ThanatosTheme = 'lilly' | 'lilly-garden' | 'death' | 'zombitious';
 type PingPoint = { t: string; ms: number };
 type WeatherData = { temp: number; desc: string; wind: number };
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -321,7 +326,6 @@ function CalculatorApp() {
   const calc = () => {
     if (!/^[\d+\-*/(). %]+$/.test(expr)) { setResult('blocked'); return; }
     try {
-      // eslint-disable-next-line no-new-func
       const v = Function(`"use strict"; return (${expr.replaceAll('%', '/100')});`)();
       setResult(Number.isFinite(v as number) ? String(v) : 'invalid');
     } catch { setResult('invalid'); }
@@ -419,13 +423,21 @@ function SettingsApp({ theme, onThemeChange }: { theme: ThanatosTheme; onThemeCh
       <section className="theme-section">
         <h3>Theme</h3>
         <div className="theme-options">
-          {(['lilly','death','zombitious'] as ThanatosTheme[]).map((t) => (
+          {(['lilly','lilly-garden','death','zombitious'] as ThanatosTheme[]).map((t) => (
             <button key={t} type="button" className={theme === t ? 'selected' : ''} onClick={() => onThemeChange(t)}>
-              {t === 'lilly' ? 'Lilly' : t === 'death' ? 'Death' : 'zomBitious'}
+              {t === 'lilly' ? 'Lilly' : t === 'lilly-garden' ? "Lilly's Garden" : t === 'death' ? 'Death' : 'zomBitious'}
             </button>
           ))}
         </div>
-        <p>{theme === 'death' ? 'Reaper active.' : theme === 'zombitious' ? 'zomBitious active.' : 'Lilly active.'}</p>
+        <p>
+          {theme === 'death'
+            ? 'Reaper active.'
+            : theme === 'zombitious'
+              ? 'zomBitious active.'
+              : theme === 'lilly-garden'
+                ? "Lilly's Garden active."
+                : 'Lilly active.'}
+        </p>
       </section>
       <section>
         <h3>Blood Intensity</h3>
@@ -693,7 +705,12 @@ function AudioVisualizerApp() {
           }
           c2d.restore();
           c2d.strokeStyle = `rgba(255,225,210,${0.26 + intensity * 0.42})`; c2d.lineWidth = 2; c2d.beginPath();
-          wave.forEach((v, i) => { const x = (i / (wave.length - 1)) * w, y = h * 0.5 + ((v - 128) / 128) * h * (0.18 + mid * 0.18); i === 0 ? c2d.moveTo(x, y) : c2d.lineTo(x, y); });
+          wave.forEach((v, i) => {
+            const x = (i / (wave.length - 1)) * w;
+            const y = h * 0.5 + ((v - 128) / 128) * h * (0.18 + mid * 0.18);
+            if (i === 0) c2d.moveTo(x, y);
+            else c2d.lineTo(x, y);
+          });
           c2d.stroke();
         }
         rafRef.current = requestAnimationFrame(draw);
@@ -743,7 +760,6 @@ function CompilerApp() {
     console.warn = (...a) => logs.push('WARN: ' + a.join(' '));
     console.error = (...a) => logs.push('ERR: ' + a.join(' '));
     try {
-      // eslint-disable-next-line no-new-func
       new Function(code)();
       setErr('');
     } catch (e) { setErr(e instanceof Error ? `${e.name}: ${e.message}` : String(e)); }
@@ -1368,13 +1384,26 @@ function AppContent({ app, openWindows, theme, onThemeChange }: { app: ThanatosA
 
 // ─── window ───────────────────────────────────────────────────────────────────
 
-function DesktopWindow({ openWindow, active, openWindows, theme, onThemeChange, onFocus, onClose, onMinimize, onMaximize }: { openWindow: OpenWindow; active: boolean; openWindows: OpenWindow[]; theme: ThanatosTheme; onThemeChange: (t: ThanatosTheme) => void; onFocus: () => void; onClose: () => void; onMinimize: () => void; onMaximize: () => void }) {
+function DesktopWindow({ openWindow, active, openWindows, theme, onThemeChange, onFocus, onMove, onResize, onClose, onMinimize, onMaximize }: { openWindow: OpenWindow; active: boolean; openWindows: OpenWindow[]; theme: ThanatosTheme; onThemeChange: (t: ThanatosTheme) => void; onFocus: () => void; onMove: (x: number, y: number) => void; onResize: (width: number, height: number, x: number, y: number) => void; onClose: () => void; onMinimize: () => void; onMaximize: () => void }) {
   if (openWindow.minimized) return null;
-  const seed = Array.from(openWindow.id).reduce((s, c) => s + c.charCodeAt(0), 0);
-  const size = openWindow.maximized ? { width: 'calc(100vw - 24px)', height: 'calc(100vh - 86px)' } : { width: 780, height: 520 };
-  const position = openWindow.maximized ? { x: 12, y: 12 } : { x: 58 + (seed % 7) * 28, y: 44 + (seed % 5) * 24 };
+  const size = openWindow.maximized ? { width: Math.max(360, window.innerWidth - 24), height: Math.max(260, window.innerHeight - 86) } : { width: openWindow.width, height: openWindow.height };
+  const position = openWindow.maximized ? { x: 12, y: 12 } : { x: openWindow.x, y: openWindow.y };
   return (
-    <Rnd bounds="parent" size={size} position={position} disableDragging={openWindow.maximized} enableResizing={!openWindow.maximized} minWidth={360} minHeight={260} dragHandleClassName="window-titlebar" style={{ zIndex: openWindow.z }} onMouseDown={onFocus} className={clsx('desktop-window', active && 'active-window')}>
+    <Rnd
+      bounds="parent"
+      size={size}
+      position={position}
+      disableDragging={openWindow.maximized}
+      enableResizing={!openWindow.maximized}
+      minWidth={360}
+      minHeight={260}
+      dragHandleClassName="window-titlebar"
+      style={{ zIndex: openWindow.z }}
+      onMouseDown={onFocus}
+      onDragStop={(_, data) => onMove(data.x, data.y)}
+      onResizeStop={(_, __, ref, ___, nextPosition) => onResize(ref.offsetWidth, ref.offsetHeight, nextPosition.x, nextPosition.y)}
+      className={clsx('desktop-window', active && 'active-window')}
+    >
       <div className="window-titlebar">
         <div className="window-title"><openWindow.app.icon size={17} /><span>{openWindow.app.name}</span></div>
         <div className="window-controls">
@@ -1413,7 +1442,7 @@ export function ThanatosDesktop() {
   const [clock, setClock] = useState(() => new Date());
   const [theme, setTheme] = useState<ThanatosTheme>(() => {
     const s = localStorage.getItem('thanatos.theme');
-    return s === 'death' || s === 'zombitious' || s === 'lilly' ? s : 'lilly';
+    return s === 'death' || s === 'zombitious' || s === 'lilly' || s === 'lilly-garden' ? s : 'lilly';
   });
   const handleBootDone = useCallback(() => setBooted(true), []);
   useEffect(() => { const i = window.setInterval(() => setClock(new Date()), 1000); return () => window.clearInterval(i); }, []);
@@ -1425,7 +1454,21 @@ export function ThanatosDesktop() {
     setWindows((ws) => {
       const ex = ws.find((w) => w.app.id === app.id);
       if (ex) return ws.map((w) => w.id === ex.id ? { ...w, minimized: false, z: topZ + 1 } : w);
-      return [...ws, { id: nanoid(), app, z: topZ + 1, minimized: false, maximized: false }];
+      const id = nanoid();
+      const placementSeed = Array.from(id).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+      const defaultWidth = app.id === 'mumblechat' ? Math.min(1160, window.innerWidth - 48) : 780;
+      const defaultHeight = app.id === 'mumblechat' ? Math.min(760, window.innerHeight - 112) : 520;
+      return [...ws, {
+        id,
+        app,
+        z: topZ + 1,
+        minimized: false,
+        maximized: app.id === 'mumblechat',
+        x: app.id === 'mumblechat' ? Math.max(18, (window.innerWidth - defaultWidth) / 2) : 58 + (placementSeed % 7) * 28,
+        y: app.id === 'mumblechat' ? 18 : 44 + (placementSeed % 5) * 24,
+        width: defaultWidth,
+        height: defaultHeight
+      }];
     });
     setStartOpen(false);
   };
@@ -1448,6 +1491,8 @@ export function ThanatosDesktop() {
         {windows.map((w) => (
           <DesktopWindow key={w.id} openWindow={w} openWindows={windows} theme={theme} onThemeChange={changeTheme} active={w.id === activeId}
             onFocus={() => patch(w.id, { z: topZ + 1 })}
+            onMove={(x, y) => patch(w.id, { x, y })}
+            onResize={(width, height, x, y) => patch(w.id, { width, height, x, y })}
             onClose={() => setWindows((ws) => ws.filter((x) => x.id !== w.id))}
             onMinimize={() => patch(w.id, { minimized: true })}
             onMaximize={() => patch(w.id, { maximized: !w.maximized, z: topZ + 1 })} />

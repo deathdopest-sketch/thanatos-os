@@ -3429,3 +3429,487 @@ body {
     font-size: 40px;
   }
 }
+
+/* Thanatos merge skin: keeps Claude's working apps, restores Codex shell life */
+.desktop-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #030101;
+  --curse-primary: 255, 35, 96;
+  --curse-accent: 142, 28, 255;
+  --curse-ghost: 255, 235, 230;
+  --curse-shadow: 4, 1, 6;
+}
+
+.theme-lilly {
+  --curse-primary: 255, 35, 96;
+  --curse-accent: 142, 28, 255;
+  --curse-ghost: 255, 235, 230;
+  --curse-shadow: 4, 1, 6;
+}
+
+.theme-lilly-garden {
+  --curse-primary: 124, 255, 118;
+  --curse-accent: 255, 135, 34;
+  --curse-ghost: 235, 255, 218;
+  --curse-shadow: 2, 8, 4;
+}
+
+.theme-death {
+  --curse-primary: 255, 18, 42;
+  --curse-accent: 120, 0, 18;
+  --curse-ghost: 255, 226, 214;
+  --curse-shadow: 8, 0, 3;
+}
+
+.theme-zombitious {
+  --curse-primary: 120, 255, 120;
+  --curse-accent: 255, 34, 82;
+  --curse-ghost: 220, 255, 210;
+  --curse-shadow: 1, 10, 4;
+}
+
+.desktop-wallpaper {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(var(--curse-primary), 0.34), transparent 24%),
+    radial-gradient(circle at 74% 24%, rgba(var(--curse-accent), 0.18), transparent 28%),
+    radial-gradient(circle at 50% 116%, rgba(112, 0, 19, 0.72), transparent 42%),
+    linear-gradient(145deg, #030101 0%, #120304 34%, #050607 68%, #170004 100%);
+}
+
+.desktop-wallpaper::before {
+  position: absolute;
+  inset: -20%;
+  content: '';
+  background:
+    linear-gradient(115deg, transparent 0 42%, rgba(255, 255, 255, 0.035) 43%, transparent 44% 100%),
+    repeating-linear-gradient(90deg, transparent 0 82px, rgba(var(--curse-primary), 0.05) 83px 84px);
+  opacity: 0.42;
+  transform: rotate(-4deg);
+}
+
+.desktop-wallpaper::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    radial-gradient(circle at 35% 30%, rgba(var(--curse-primary), 0.16), transparent 18%);
+  background-size: 100% 5px, cover;
+  mix-blend-mode: overlay;
+  opacity: 0.48;
+}
+
+.sprite-background {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: min(92vw, 92vh);
+  aspect-ratio: 1;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-size: 800% 800%;
+  background-position: 0 0;
+  filter: saturate(1.05) contrast(1.16) brightness(0.58) drop-shadow(0 0 42px rgba(var(--curse-primary), 0.22));
+  opacity: 0.56;
+  transform: translate(-50%, -50%);
+  animation: sprite-background-drift 5.8s steps(64, end) infinite;
+}
+
+.theme-lilly .sprite-background {
+  background-image: url('/assets/thanatos-background.png');
+}
+
+.theme-lilly-garden .sprite-background {
+  background-image: url('/assets/lilly-garden-thanatos-theme.png');
+}
+
+.theme-death .sprite-background {
+  background-image: url('/assets/death-thanatos-background.png');
+}
+
+.theme-zombitious .sprite-background {
+  background-image: url('/assets/zombitious-thanatos-background.png');
+}
+
+.blood-rain {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(180deg, rgba(var(--curse-primary), 0.18), transparent 16%),
+    repeating-linear-gradient(90deg, transparent 0 58px, rgba(var(--curse-primary), 0.16) 59px, transparent 62px);
+  filter: blur(0.4px);
+  mask-image: linear-gradient(180deg, #000 0%, transparent 74%);
+  opacity: 0.35;
+}
+
+.crt-overlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 2px 5px),
+    radial-gradient(circle at 50% 45%, transparent 0 42%, rgba(0, 0, 0, 0.46) 100%);
+  mix-blend-mode: overlay;
+  opacity: 0.58;
+}
+
+.audio-curse,
+.desktop-shell::after {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  content: '';
+  background:
+    linear-gradient(90deg, rgba(var(--curse-primary), calc(var(--audio-bass) * 0.22)), transparent 16%, transparent 84%, rgba(var(--curse-accent), calc(var(--audio-mid) * 0.18))),
+    radial-gradient(circle at 50% 50%, transparent 0 39%, rgba(0, 0, 0, calc(0.26 + var(--audio-level) * 0.36))),
+    repeating-linear-gradient(calc(90deg + var(--audio-mid) * 16deg), transparent 0 18px, rgba(var(--curse-ghost), calc(var(--audio-level) * 0.035)) 19px 21px);
+  opacity: calc(0.16 + var(--audio-level) * 0.48);
+  mix-blend-mode: hard-light;
+}
+
+.window-layer {
+  position: absolute;
+  inset: 0 0 60px;
+  z-index: 500;
+}
+
+.death-brand {
+  pointer-events: none;
+  position: absolute;
+  right: 34px;
+  top: 28px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 239, 229, 0.12);
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(2.2rem, 7vw, 6.8rem);
+  font-weight: 900;
+  text-shadow: 0 0 34px rgba(var(--curse-primary), 0.24);
+}
+
+.boot-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 36%, rgba(var(--curse-primary), 0.24), transparent 32%),
+    radial-gradient(circle at 50% 100%, rgba(var(--curse-accent), 0.18), transparent 42%),
+    #030101;
+}
+
+.boot-panel canvas {
+  position: absolute !important;
+  inset: 0;
+}
+
+.boot-sprite {
+  position: absolute;
+  inset: auto auto 4vh 50%;
+  width: min(72vw, 72vh);
+  aspect-ratio: 1;
+  background: url('/assets/lillythanatos-loading.png') center / 800% 800% no-repeat;
+  image-rendering: pixelated;
+  filter: brightness(0.68) contrast(1.18) saturate(1.1) drop-shadow(0 0 38px rgba(var(--curse-primary), 0.25));
+  opacity: 0.46;
+  transform: translateX(-50%);
+  animation: sprite-background-drift 4.2s steps(64, end) infinite;
+}
+
+.boot-mark {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  color: rgb(var(--curse-ghost));
+  text-align: center;
+  text-shadow: 0 0 28px rgba(var(--curse-primary), 0.75);
+}
+
+.boot-mark > div {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(2rem, 7vw, 5.6rem);
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.boot-glyph {
+  display: inline-block;
+}
+
+.boot-sigil {
+  color: rgb(var(--curse-primary));
+  filter: drop-shadow(0 0 28px rgba(var(--curse-primary), 0.88));
+}
+
+.boot-mark small {
+  color: rgba(var(--curse-ghost), 0.66);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.28em;
+}
+
+.desktop-window {
+  overflow: hidden;
+  border: 1px solid rgba(var(--curse-primary), 0.34);
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, rgba(var(--curse-primary), 0.08), transparent 26%),
+    linear-gradient(180deg, rgba(20, 5, 7, 0.94), rgba(5, 4, 5, 0.94));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.72), inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(18px);
+}
+
+.active-window {
+  border-color: rgba(var(--curse-primary), 0.92);
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.8), 0 0 46px rgba(var(--curse-primary), 0.22);
+}
+
+.window-titlebar {
+  display: flex;
+  height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 12px;
+  border-bottom: 1px solid rgba(var(--curse-primary), 0.18);
+  background: linear-gradient(90deg, rgba(var(--curse-primary), 0.18), rgba(0, 0, 0, 0.08));
+  cursor: grab;
+}
+
+.window-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: rgb(var(--curse-ghost));
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.window-title span,
+.task-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.window-controls button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgba(var(--curse-primary), 0.22);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  color: rgb(var(--curse-ghost));
+}
+
+.window-content {
+  position: relative;
+  display: flex;
+  height: calc(100% - 42px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.start-menu {
+  position: absolute;
+  left: 14px;
+  bottom: 70px;
+  z-index: 700;
+  display: grid;
+  width: min(760px, calc(100vw - 28px));
+  max-height: min(680px, calc(100vh - 100px));
+  gap: 14px;
+  overflow: hidden;
+  padding: 16px;
+  border: 1px solid rgba(var(--curse-primary), 0.34);
+  border-radius: 7px;
+  background: linear-gradient(180deg, rgba(20, 4, 6, 0.96), rgba(4, 3, 4, 0.94));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7), 0 0 60px rgba(var(--curse-primary), 0.18);
+  backdrop-filter: blur(24px);
+}
+
+.start-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgb(var(--curse-primary));
+  font-family: 'Playfair Display', serif;
+  font-size: 1.35rem;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--curse-primary), 0.18);
+  border-radius: 7px;
+  background: rgba(var(--curse-primary), 0.06);
+}
+
+.search-row input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.category-tabs {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+}
+
+.category-tabs button,
+.start-button,
+.task-item,
+.tray {
+  border: 1px solid rgba(var(--curse-primary), 0.24);
+  border-radius: 7px;
+  background: rgba(5, 2, 3, 0.66);
+  color: rgb(var(--curse-ghost));
+}
+
+.category-tabs button,
+.start-button,
+.task-item {
+  cursor: pointer;
+}
+
+.category-tabs button {
+  min-width: 92px;
+  padding: 9px 12px;
+}
+
+.category-tabs .selected,
+.active-task {
+  border-color: rgba(var(--curse-primary), 0.74);
+  background: linear-gradient(180deg, rgba(var(--curse-primary), 0.28), rgba(21, 2, 6, 0.82));
+  color: rgb(var(--curse-ghost));
+  box-shadow: 0 0 22px rgba(var(--curse-primary), 0.16);
+}
+
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 9px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.launcher-tile {
+  display: grid;
+  min-height: 92px;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  border: 1px solid rgba(var(--curse-primary), 0.16);
+  border-radius: 7px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(var(--curse-primary), 0.12), transparent 58%),
+    rgba(8, 3, 4, 0.64);
+  color: rgb(var(--curse-ghost));
+  text-align: center;
+  cursor: pointer;
+}
+
+.launcher-tile:hover {
+  border-color: rgba(var(--curse-primary), 0.48);
+  background: rgba(var(--curse-primary), 0.12);
+  box-shadow: 0 0 20px rgba(var(--curse-primary), 0.16);
+}
+
+.taskbar {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  z-index: 800;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  height: 48px;
+  align-items: center;
+  padding: 6px;
+  border: 1px solid rgba(var(--curse-primary), 0.28);
+  border-radius: 7px;
+  background: rgba(5, 2, 3, 0.84);
+  box-shadow: 0 0 38px rgba(var(--curse-primary), 0.12);
+  backdrop-filter: blur(18px);
+}
+
+.start-button,
+.task-item,
+.tray {
+  display: flex;
+  min-width: 0;
+  height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+}
+
+.task-items {
+  display: flex;
+  min-width: 0;
+  gap: 7px;
+  overflow-x: auto;
+}
+
+.task-item {
+  max-width: 190px;
+}
+
+.tray {
+  color: rgba(var(--curse-ghost), 0.8);
+}
+
+@keyframes sprite-background-drift {
+  from { background-position: 0 0; }
+  to { background-position: 100% 100%; }
+}
+
+@media (max-width: 720px) {
+  .taskbar {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .tray,
+  .death-brand {
+    display: none;
+  }
+
+  .start-button span {
+    display: none;
+  }
+
+  .desktop-window {
+    max-width: calc(100vw - 20px);
+  }
+}

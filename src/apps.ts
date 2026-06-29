@@ -1,6 +1,5 @@
 import {
   AudioLines,
-  BadgeHelp,
   Binary,
   BookOpen,
   Bot,
