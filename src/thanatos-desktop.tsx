@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Rnd } from 'react-rnd';
 import gsap from 'gsap';
@@ -81,6 +81,49 @@ type OpenWindow = {
   width: number;
   height: number;
 };
+type VaultEntry = {
+  id: string;
+  service: string;
+  email: string;
+  username: string;
+  password: string;
+  createdAt: string;
+};
+type AccessUser = {
+  usernameHash: string;
+  displayName: string;
+  status: 'pending' | 'active';
+  recoveryHash?: string;
+  recoverySalt?: string;
+  pendingWrappedVaultKey?: EncryptedPayload;
+  salt?: string;
+  verifier?: string;
+  wrappedVaultKey?: EncryptedPayload;
+};
+type AccessStore = {
+  version: 1;
+  ownerSalt?: string;
+  ownerVerifier?: string;
+  users: AccessUser[];
+};
+type EncryptedPayload = {
+  iv: string;
+  data: string;
+};
+type AccessSession = {
+  username: string;
+  vaultKey: CryptoKey;
+  startedAt: number;
+};
+type MusicTrack = {
+  id: string;
+  name: string;
+  type: string;
+  blob: Blob;
+};
+type MusicTrackView = MusicTrack & {
+  url: string;
+};
 type ThanatosTheme = 'lilly' | 'lilly-garden' | 'death' | 'zombitious';
 type PingPoint = { t: string; ms: number };
 type WeatherData = { temp: number; desc: string; wind: number };
@@ -95,10 +138,23 @@ type MumbleChatPayload = {
   type?: string; loggedIn?: unknown; userId?: unknown; username?: unknown; displayName?: unknown;
   avatarUrl?: unknown; unreadPms?: unknown; onlineFriends?: unknown; offlineFriends?: unknown; totalFriends?: unknown;
 };
+type AudioPulse = {
+  level: number;
+  bass: number;
+  mid: number;
+  bands: number[];
+  source: 'music' | 'capture' | 'idle';
+};
+
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const CMDS = ['help', 'status', 'apps', 'date', 'skull', 'clear', 'ls', 'whoami', 'uname'];
+const CMDS = ['help', 'status', 'apps', 'date', 'skull', 'clear', 'ls', 'whoami', 'uname', 'rip <username>', 'schadelkoph'];
 
 const QUOTES = [
   'EVERY PROCESS ENDS.', 'THE KERNEL REMEMBERS THE DEAD.', 'ALL WINDOWS CLOSE EVENTUALLY.',
@@ -142,6 +198,40 @@ const MAN_DB: Record<string, string> = {
 };
 
 const LOREM = ['lorem','ipsum','dolor','sit','amet','consectetur','adipiscing','elit','sed','do','eiusmod','tempor','incididunt','ut','labore','et','dolore','magna','aliqua','enim','veniam','quis','nostrud','exercitation','ullamco','laboris','nisi','aliquip','ex','ea','commodo','consequat','duis','aute','irure','in','reprehenderit','voluptate','velit','esse','cillum','fugiat','nulla','pariatur','excepteur','sint','occaecat','cupidatat','non','proident'];
+const ACCESS_KEY = 'thanatos.access.v1';
+const LEGACY_VAULT_KEY = 'thanatos.accountVault';
+const SECURE_VAULT_KEY = 'thanatos.accountVault.secure.v1';
+const WINDOW_STATE_KEY = 'thanatos.windowState.v1';
+const MUSIC_DB = 'thanatos.musicLibrary.v1';
+const MUSIC_STORE = 'tracks';
+const MAIL_WEBMAIL_URL = 'https://mail.mumblechat.online/webmail/';
+const MAIL_ADMIN_URL = 'https://mail.mumblechat.online/admin/';
+const MAIL_DOMAIN = 'mumblechat.online';
+
+const idlePulse: AudioPulse = { level: 0, bass: 0, mid: 0, bands: Array.from({ length: 24 }, () => 0), source: 'idle' };
+
+function emitAudioPulse(pulse: AudioPulse) {
+  document.documentElement.style.setProperty('--audio-level', pulse.level.toFixed(3));
+  document.documentElement.style.setProperty('--audio-bass', pulse.bass.toFixed(3));
+  document.documentElement.style.setProperty('--audio-mid', pulse.mid.toFixed(3));
+  window.dispatchEvent(new CustomEvent<AudioPulse>('thanatos:audio-pulse', { detail: pulse }));
+}
+
+function getAudioPulse(freq: Uint8Array, source: AudioPulse['source']): AudioPulse {
+  const read = (from: number, to: number) => {
+    const slice = freq.slice(from, Math.min(to, freq.length));
+    return slice.length ? slice.reduce((sum, value) => sum + value, 0) / (slice.length * 255) : 0;
+  };
+  const level = read(0, freq.length);
+  const bass = read(0, 24);
+  const mid = read(24, 96);
+  const bands = Array.from({ length: 24 }, (_, i) => {
+    const start = Math.floor((i / 24) * freq.length);
+    const end = Math.max(start + 1, Math.floor(((i + 1) / 24) * freq.length));
+    return read(start, end);
+  });
+  return { level, bass, mid, bands, source };
+}
 
 // ─── 3D / ambient ─────────────────────────────────────────────────────────────
 
@@ -281,9 +371,172 @@ function randomToken(length: number, alphabet = 'abcdefghijkmnopqrstuvwxyz234567
   return Array.from(values, (value) => alphabet[value % alphabet.length]).join('');
 }
 
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+function bytesToB64(bytes: Uint8Array) {
+  let bin = '';
+  bytes.forEach((byte) => { bin += String.fromCharCode(byte); });
+  return btoa(bin);
+}
+
+function b64ToBytes(value: string) {
+  return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+}
+
+function exactBuffer(bytes: Uint8Array) {
+  return bytes.slice().buffer as ArrayBuffer;
+}
+
+function randomB64(bytes = 16) {
+  const values = new Uint8Array(bytes);
+  crypto.getRandomValues(values);
+  return bytesToB64(values);
+}
+
+async function sha256(value: string) {
+  const hash = await crypto.subtle.digest('SHA-256', textEncoder.encode(value));
+  return bytesToB64(new Uint8Array(hash));
+}
+
+async function derivePassKey(password: string, saltB64: string) {
+  const baseKey = await crypto.subtle.importKey('raw', textEncoder.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: b64ToBytes(saltB64), iterations: 250_000, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function keyVerifier(key: CryptoKey) {
+  const raw = await crypto.subtle.exportKey('raw', key);
+  const hash = await crypto.subtle.digest('SHA-256', raw);
+  return bytesToB64(new Uint8Array(hash));
+}
+
+async function encryptBytes(key: CryptoKey, bytes: Uint8Array): Promise<EncryptedPayload> {
+  const iv = new Uint8Array(12);
+  crypto.getRandomValues(iv);
+  const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: exactBuffer(iv) }, key, exactBuffer(bytes));
+  return { iv: bytesToB64(iv), data: bytesToB64(new Uint8Array(data)) };
+}
+
+async function decryptBytes(key: CryptoKey, payload: EncryptedPayload) {
+  const data = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: exactBuffer(b64ToBytes(payload.iv)) }, key, exactBuffer(b64ToBytes(payload.data)));
+  return new Uint8Array(data);
+}
+
+async function encryptJson(key: CryptoKey, value: unknown) {
+  return encryptBytes(key, textEncoder.encode(JSON.stringify(value)));
+}
+
+async function decryptJson<T>(key: CryptoKey, payload: EncryptedPayload) {
+  return JSON.parse(textDecoder.decode(await decryptBytes(key, payload))) as T;
+}
+
+async function generateVaultKey() {
+  return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+}
+
+async function wrapVaultKey(userKey: CryptoKey, vaultKey: CryptoKey) {
+  const raw = new Uint8Array(await crypto.subtle.exportKey('raw', vaultKey));
+  return encryptBytes(userKey, raw);
+}
+
+async function unwrapVaultKey(userKey: CryptoKey, payload: EncryptedPayload) {
+  const raw = await decryptBytes(userKey, payload);
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+}
+
+function readAccessStore(): AccessStore {
+  try {
+    const parsed = JSON.parse(readStoredValue(ACCESS_KEY) ?? '') as AccessStore;
+    return parsed?.version === 1 && Array.isArray(parsed.users) ? parsed : { version: 1, users: [] };
+  } catch {
+    return { version: 1, users: [] };
+  }
+}
+
+function writeAccessStore(store: AccessStore) {
+  writeStoredValue(ACCESS_KEY, JSON.stringify(store));
+  window.dispatchEvent(new CustomEvent('thanatos:access-store'));
+}
+
+async function readVault(vaultKey: CryptoKey): Promise<VaultEntry[]> {
+  const secure = readStoredValue(SECURE_VAULT_KEY);
+  if (!secure) return [];
+  return decryptJson<VaultEntry[]>(vaultKey, JSON.parse(secure) as EncryptedPayload);
+}
+
+async function writeVault(vaultKey: CryptoKey, entries: VaultEntry[]) {
+  writeStoredValue(SECURE_VAULT_KEY, JSON.stringify(await encryptJson(vaultKey, entries)));
+  window.dispatchEvent(new CustomEvent('thanatos:vault-updated'));
+}
+
+function readLegacyVault() {
+  try {
+    return JSON.parse(readStoredValue(LEGACY_VAULT_KEY) ?? '[]') as VaultEntry[];
+  } catch {
+    return [];
+  }
+}
+
+async function ensureVaultInitialized(vaultKey: CryptoKey) {
+  if (readStoredValue(SECURE_VAULT_KEY)) return;
+  const legacy = readLegacyVault();
+  await writeVault(vaultKey, legacy);
+  if (legacy.length) localStorage.removeItem(LEGACY_VAULT_KEY);
+}
+
+function normalizeUser(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+}
+
+async function makeUserHash(username: string) {
+  return sha256(`user:${normalizeUser(username)}`);
+}
+
+function openMusicDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(MUSIC_DB, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(MUSIC_STORE)) db.createObjectStore(MUSIC_STORE, { keyPath: 'id' });
+    };
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result);
+  });
+}
+
+async function readMusicTracks(): Promise<MusicTrack[]> {
+  const db = await openMusicDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(MUSIC_STORE, 'readonly');
+    const req = tx.objectStore(MUSIC_STORE).getAll();
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result as MusicTrack[]);
+    tx.oncomplete = () => db.close();
+  });
+}
+
+async function writeMusicTracks(tracks: MusicTrack[]) {
+  const db = await openMusicDb();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(MUSIC_STORE, 'readwrite');
+    const store = tx.objectStore(MUSIC_STORE);
+    store.clear();
+    tracks.forEach((track) => store.put(track));
+    tx.onerror = () => reject(tx.error);
+    tx.oncomplete = () => { db.close(); resolve(); };
+  });
+}
+
 // ─── system apps ──────────────────────────────────────────────────────────────
 
-function TerminalApp({ openWindows }: { openWindows: OpenWindow[] }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function LegacyTerminalApp({ openWindows }: { openWindows: OpenWindow[] }) {
   const [lines, setLines] = useState<string[]>(['thanatos@crypt:~$ status', 'death kernel awake', 'vfs: indexeddb', 'remote bridge: offline', '', 'type "help" for commands']);
   const [input, setInput] = useState('');
   const outRef = useRef<HTMLDivElement>(null);
@@ -314,6 +567,240 @@ function TerminalApp({ openWindows }: { openWindows: OpenWindow[] }) {
         <span>$</span>
         <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} autoFocus />
         <button type="button" onClick={run}><Play size={15} /></button>
+      </div>
+    </div>
+  );
+}
+
+type TerminalFlow =
+  | { kind: 'idle' }
+  | { kind: 'rip-owner-bootstrap'; username: string; step: 'set' | 'confirm'; first: string }
+  | { kind: 'rip-owner-auth'; username: string }
+  | { kind: 'schadelkoph-username' }
+  | { kind: 'schadelkoph-recovery'; username: string }
+  | { kind: 'schadelkoph-set-password'; username: string; recoveryId: string; step: 'set' | 'confirm'; first: string }
+  | { kind: 'schadelkoph-password'; username: string };
+
+function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: OpenWindow[]; session: AccessSession | null; onSessionChange: (session: AccessSession | null) => void }) {
+  const [lines, setLines] = useState<string[]>(['thanatos@crypt:~$ status', 'death kernel awake', 'vfs: indexeddb', 'remote bridge: offline', '', 'type "help" for commands']);
+  const [input, setInput] = useState('');
+  const [flow, setFlow] = useState<TerminalFlow>({ kind: 'idle' });
+  const outRef = useRef<HTMLDivElement>(null);
+
+  const pushLines = (next: string[]) => {
+    setLines((current) => [...current, ...next]);
+    window.requestAnimationFrame(() => { if (outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight; });
+  };
+
+  const finishRip = async (username: string, ownerPass: string) => {
+    const store = readAccessStore();
+    if (!store.ownerSalt || !store.ownerVerifier) {
+      const ownerSalt = randomB64();
+      const ownerKey = await derivePassKey(ownerPass, ownerSalt);
+      store.ownerSalt = ownerSalt;
+      store.ownerVerifier = await keyVerifier(ownerKey);
+    } else {
+      const ownerKey = await derivePassKey(ownerPass, store.ownerSalt);
+      if (await keyVerifier(ownerKey) !== store.ownerVerifier) {
+        pushLines(['owner passphrase rejected.']);
+        return;
+      }
+    }
+    const normalized = normalizeUser(username);
+    const usernameHash = await makeUserHash(normalized);
+    if (store.users.some((user) => user.usernameHash === usernameHash)) {
+      pushLines([`${normalized} is already marked by the reaper.`]);
+      return;
+    }
+    const recoveryId = `reap_${randomToken(18)}`;
+    const recoverySalt = randomB64();
+    const recoveryKey = await derivePassKey(recoveryId, recoverySalt);
+    if (readStoredValue(SECURE_VAULT_KEY) && !session) {
+      pushLines(['vault is already sealed. unlock with schadelkoph before adding another user.']);
+      return;
+    }
+    const vaultKey = session?.vaultKey ?? await generateVaultKey();
+    await ensureVaultInitialized(vaultKey);
+    store.users.push({
+      usernameHash,
+      displayName: normalized,
+      status: 'pending',
+      recoveryHash: await sha256(`recovery:${recoveryId}`),
+      recoverySalt,
+      pendingWrappedVaultKey: await wrapVaultKey(recoveryKey, vaultKey)
+    });
+    writeAccessStore(store);
+    pushLines([`marked ${normalized}.`, `recovery id: ${recoveryId}`, 'give them the username and recovery id. lose it and the gate stays shut.']);
+  };
+
+  const claimUser = async (username: string, recoveryId: string, password: string) => {
+    const store = readAccessStore();
+    const normalized = normalizeUser(username);
+    const usernameHash = await makeUserHash(normalized);
+    const user = store.users.find((item) => item.usernameHash === usernameHash);
+    if (!user || user.status !== 'pending' || !user.recoverySalt || !user.pendingWrappedVaultKey || user.recoveryHash !== await sha256(`recovery:${recoveryId}`)) {
+      pushLines(['the reaper does not recognize that mark.']);
+      return;
+    }
+    const salt = randomB64();
+    const userKey = await derivePassKey(password, salt);
+    const recoveryKey = await derivePassKey(recoveryId, user.recoverySalt);
+    const vaultKey = await unwrapVaultKey(recoveryKey, user.pendingWrappedVaultKey);
+    user.status = 'active';
+    user.salt = salt;
+    user.verifier = await keyVerifier(userKey);
+    user.wrappedVaultKey = await wrapVaultKey(userKey, vaultKey);
+    delete user.recoveryHash;
+    delete user.recoverySalt;
+    delete user.pendingWrappedVaultKey;
+    writeAccessStore(store);
+    onSessionChange({ username: normalized, vaultKey, startedAt: Date.now() });
+    pushLines([`welcome, ${normalized}.`, 'reaper eyes online. account vault unlocked for this session.']);
+  };
+
+  const loginUser = async (username: string, password: string) => {
+    const normalized = normalizeUser(username);
+    const store = readAccessStore();
+    const usernameHash = await makeUserHash(normalized);
+    const user = store.users.find((item) => item.usernameHash === usernameHash);
+    if (!user || user.status !== 'active' || !user.salt || !user.verifier || !user.wrappedVaultKey) {
+      pushLines(['unknown or unclaimed user.']);
+      return;
+    }
+    try {
+      const userKey = await derivePassKey(password, user.salt);
+      if (await keyVerifier(userKey) !== user.verifier) {
+        pushLines(['password rejected.']);
+        return;
+      }
+      const vaultKey = await unwrapVaultKey(userKey, user.wrappedVaultKey);
+      await ensureVaultInitialized(vaultKey);
+      onSessionChange({ username: normalized, vaultKey, startedAt: Date.now() });
+      pushLines([`welcome back, ${normalized}.`, 'account vault unlocked for this session.']);
+    } catch {
+      pushLines(['vault key could not be opened.']);
+    }
+  };
+
+  const handleFlow = async (value: string) => {
+    if (flow.kind === 'rip-owner-bootstrap') {
+      if (flow.step === 'set') {
+        setFlow({ ...flow, step: 'confirm', first: value });
+        pushLines(['confirm owner passphrase:']);
+      } else if (value === flow.first) {
+        setFlow({ kind: 'idle' });
+        await finishRip(flow.username, value);
+      } else {
+        setFlow({ kind: 'idle' });
+        pushLines(['owner passphrase mismatch. rip aborted.']);
+      }
+      return;
+    }
+    if (flow.kind === 'rip-owner-auth') {
+      setFlow({ kind: 'idle' });
+      await finishRip(flow.username, value);
+      return;
+    }
+    if (flow.kind === 'schadelkoph-username') {
+      const username = normalizeUser(value);
+      const store = readAccessStore();
+      const usernameHash = await makeUserHash(username);
+      const user = store.users.find((item) => item.usernameHash === usernameHash);
+      if (!user) {
+        setFlow({ kind: 'idle' });
+        pushLines(['you are not on the access list.']);
+      } else if (user.status === 'pending') {
+        setFlow({ kind: 'schadelkoph-recovery', username });
+        pushLines(['recovery id:']);
+      } else {
+        setFlow({ kind: 'schadelkoph-password', username });
+        pushLines(['password:']);
+      }
+      return;
+    }
+    if (flow.kind === 'schadelkoph-recovery') {
+      setFlow({ kind: 'schadelkoph-set-password', username: flow.username, recoveryId: value, step: 'set', first: '' });
+      pushLines(["set your password. if you lose it, you're basically fucked.", "if you've been entrusted with the reapers eyes, make sure to leave the others blind", 'set password:']);
+      return;
+    }
+    if (flow.kind === 'schadelkoph-set-password') {
+      if (flow.step === 'set') {
+        if (value.length < 10) {
+          pushLines(['password needs at least 10 characters. set password:']);
+          return;
+        }
+        setFlow({ ...flow, step: 'confirm', first: value });
+        pushLines(['confirm password:']);
+      } else if (value === flow.first) {
+        setFlow({ kind: 'idle' });
+        await claimUser(flow.username, flow.recoveryId, value);
+      } else {
+        setFlow({ kind: 'idle' });
+        pushLines(['password mismatch. claim aborted.']);
+      }
+      return;
+    }
+    if (flow.kind === 'schadelkoph-password') {
+      setFlow({ kind: 'idle' });
+      await loginUser(flow.username, value);
+    }
+  };
+
+  const run = async () => {
+    const cmd = input.trim();
+    if (!cmd) return;
+    setInput('');
+    if (flow.kind !== 'idle') {
+      pushLines([`$ ${'*'.repeat(Math.min(cmd.length, 18))}`]);
+      await handleFlow(cmd);
+      return;
+    }
+    if (cmd === 'clear') { setLines([]); return; }
+    if (cmd === 'schadelkoph logout') {
+      onSessionChange(null);
+      pushLines(['$ schadelkoph logout', 'reaper eyes sealed.']);
+      return;
+    }
+    if (cmd === 'schadelkoph whoami') {
+      pushLines(['$ schadelkoph whoami', session ? `${session.username} since ${new Date(session.startedAt).toLocaleTimeString()}` : 'no one. the vault is blind.']);
+      return;
+    }
+    if (cmd === 'schadelkoph') {
+      setFlow({ kind: 'schadelkoph-username' });
+      pushLines(['$ schadelkoph', 'And who are you in Death']);
+      return;
+    }
+    if (cmd.startsWith('rip ')) {
+      const username = normalizeUser(cmd.slice(4));
+      if (!username) {
+        pushLines(['$ rip', 'usage: rip <username>']);
+        return;
+      }
+      const store = readAccessStore();
+      setFlow(store.ownerVerifier ? { kind: 'rip-owner-auth', username } : { kind: 'rip-owner-bootstrap', username, step: 'set', first: '' });
+      pushLines([`$ rip ${username}`, store.ownerVerifier ? 'owner passphrase:' : 'set owner passphrase:']);
+      return;
+    }
+    const out: Record<string, string[]> = {
+      help: [`commands: ${CMDS.join(', ')}`],
+      status: ['kernel: THANATOS v2.0', `windows: ${openWindows.length}`, 'vfs: indexeddb persistent', 'remote: offline', 'theme: death'],
+      apps: appRegistry.slice(0, 20).map((a) => `${a.id.padEnd(18)} ${a.name}`),
+      date: [new Date().toString()],
+      skull: ['skull pulse armed'],
+      ls: ['/home/death  /vault  /tmp  /dev/null'],
+      whoami: [session ? `${session.username} (schadelkoph)` : 'root - local shell only'],
+      uname: ['Thanatos OS 2.0 Death-Kernel x86_death']
+    };
+    pushLines([`$ ${cmd}`, ...(out[cmd] ?? [`not found: ${cmd}`])]);
+  };
+
+  return (
+    <div className="terminal-app">
+      <div className="terminal-output" ref={outRef}>{lines.map((l, i) => <p key={`${l}-${i}`}>{l || ' '}</p>)}</div>
+      <div className="terminal-input">
+        <span>$</span>
+        <input value={input} type={flow.kind === 'idle' || flow.kind === 'schadelkoph-username' ? 'text' : 'password'} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void run()} autoFocus />
+        <button type="button" onClick={() => void run()}><Play size={15} /></button>
       </div>
     </div>
   );
@@ -427,6 +914,22 @@ function WeatherApp() {
       {err && <div className="vfs-error">{err}</div>}
       {wx && <div className="weather-display"><div className="weather-temp">{wx.temp}°F</div><div className="weather-desc">{wx.desc}</div><div>Wind: {wx.wind} mph</div></div>}
       {!wx && !err && <p className="media-status">Powered by Open-Meteo — no API key needed.</p>}
+    </div>
+  );
+}
+
+function MailApp() {
+  return (
+    <div className="mail-app">
+      <Mail size={46} />
+      <h3>MumbleChat Mail</h3>
+      <p>Use real MumbleChat mailboxes through Mailu. Account creation stays manual until the Mailu API bridge is added.</p>
+      <div className="mail-links">
+        <a href={MAIL_WEBMAIL_URL} target="_blank" rel="noreferrer"><button type="button"><Mail size={15} /> Webmail</button></a>
+        <a href={MAIL_ADMIN_URL} target="_blank" rel="noreferrer"><button type="button"><ShieldCheck size={15} /> Admin</button></a>
+        <button type="button" onClick={() => cp(MAIL_WEBMAIL_URL)}><Copy size={15} /> Copy webmail</button>
+      </div>
+      <code>{MAIL_DOMAIN}</code>
     </div>
   );
 }
@@ -629,24 +1132,154 @@ function ImageViewerApp() {
 }
 
 function MusicPlayerApp() {
-  const [playlist, setPlaylist] = useState<Array<{ name: string; url: string }>>([]);
+  const [playlist, setPlaylist] = useState<MusicTrackView[]>([]);
   const [current, setCurrent] = useState(0);
+  const [musicStatus, setMusicStatus] = useState('Music library loading...');
   const inputRef = useRef<HTMLInputElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const rafRef = useRef(0);
+  const playlistRef = useRef<MusicTrackView[]>([]);
+
+  const stopMusicPulse = useCallback(() => {
+    window.cancelAnimationFrame(rafRef.current);
+    emitAudioPulse(idlePulse);
+  }, []);
+
+  useEffect(() => {
+    playlistRef.current = playlist;
+  }, [playlist]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readMusicTracks()
+      .then((tracks) => {
+        if (cancelled) return;
+        setPlaylist(tracks.map((track) => ({ ...track, url: URL.createObjectURL(track.blob) })));
+        setMusicStatus(tracks.length ? `Loaded ${tracks.length} saved track${tracks.length === 1 ? '' : 's'}.` : 'No saved tracks.');
+      })
+      .catch(() => setMusicStatus('Music library unavailable.'));
+    return () => {
+      cancelled = true;
+      stopMusicPulse();
+      void audioCtxRef.current?.close();
+      playlistRef.current.forEach((track) => URL.revokeObjectURL(track.url));
+    };
+  }, [stopMusicPulse]);
+
+  const startMusicPulse = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = audioCtxRef.current ?? new AudioCtx();
+      audioCtxRef.current = ctx;
+      if (ctx.state === 'suspended') await ctx.resume();
+      if (!analyserRef.current) {
+        analyserRef.current = ctx.createAnalyser();
+        analyserRef.current.fftSize = 1024;
+        analyserRef.current.smoothingTimeConstant = 0.76;
+      }
+      if (!sourceRef.current) {
+        sourceRef.current = ctx.createMediaElementSource(audio);
+        sourceRef.current.connect(analyserRef.current);
+        analyserRef.current.connect(ctx.destination);
+      }
+      const analyser = analyserRef.current;
+      const freq = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        if (audio.paused || audio.ended) {
+          stopMusicPulse();
+          return;
+        }
+        analyser.getByteFrequencyData(freq);
+        emitAudioPulse(getAudioPulse(freq, 'music'));
+        rafRef.current = window.requestAnimationFrame(tick);
+      };
+      window.cancelAnimationFrame(rafRef.current);
+      tick();
+    } catch (error) {
+      console.warn('Thanatos music analyzer unavailable', error);
+      stopMusicPulse();
+    }
+  };
+
+  const persistMusic = async (tracks: MusicTrackView[]) => {
+    await writeMusicTracks(tracks.map(({ id, name, type, blob }) => ({ id, name, type, blob })));
+  };
+
+  const loadTracks = async (files: FileList | null) => {
+    const next = [
+      ...playlist,
+      ...Array.from(files ?? []).map((file) => ({
+        id: nanoid(),
+        name: file.name,
+        type: file.type,
+        blob: file,
+        url: URL.createObjectURL(file)
+      }))
+    ];
+    setPlaylist(next);
+    setCurrent(0);
+    stopMusicPulse();
+    await persistMusic(next);
+    setMusicStatus(`Saved ${next.length} track${next.length === 1 ? '' : 's'} locally.`);
+  };
+
+  const removeTrack = async (id: string) => {
+    const target = playlist.find((track) => track.id === id);
+    if (target) URL.revokeObjectURL(target.url);
+    const next = playlist.filter((track) => track.id !== id);
+    setPlaylist(next);
+    setCurrent((value) => Math.min(value, Math.max(0, next.length - 1)));
+    stopMusicPulse();
+    await persistMusic(next);
+    setMusicStatus(`Saved ${next.length} track${next.length === 1 ? '' : 's'} locally.`);
+  };
+
+  const clearTracks = async () => {
+    playlist.forEach((track) => URL.revokeObjectURL(track.url));
+    setPlaylist([]);
+    setCurrent(0);
+    stopMusicPulse();
+    await persistMusic([]);
+    setMusicStatus('Music library cleared.');
+  };
+
   return (
     <div className="music-player-app">
-      <input ref={inputRef} type="file" accept="audio/*" multiple onChange={(e) => { setPlaylist(Array.from(e.target.files ?? []).map((f) => ({ name: f.name, url: URL.createObjectURL(f) }))); setCurrent(0); }} style={{ display: 'none' }} />
+      <input ref={inputRef} type="file" accept="audio/*" multiple onChange={(e) => void loadTracks(e.target.files)} style={{ display: 'none' }} />
       {playlist.length === 0 ? <div className="player-empty"><Music size={48} /><p>No tracks</p><button type="button" onClick={() => inputRef.current?.click()}><FolderOpen size={15} /> Open Music</button></div>
         : <>
             <div className="music-now-playing"><Music size={28} /><span>{playlist[current]?.name ?? ''}</span></div>
-            <audio src={playlist[current]?.url} controls autoPlay onEnded={() => setCurrent((c) => (c + 1) % playlist.length)} className="music-audio" />
+            <audio
+              ref={audioRef}
+              src={playlist[current]?.url}
+              controls
+              autoPlay
+              onPlay={() => void startMusicPulse()}
+              onPause={stopMusicPulse}
+              onEnded={() => { stopMusicPulse(); setCurrent((c) => (c + 1) % playlist.length); }}
+              className="music-audio"
+            />
             <div className="music-controls">
               <button type="button" onClick={() => setCurrent((c) => (c - 1 + playlist.length) % playlist.length)}><ChevronLeft size={15} /></button>
               <span>{current + 1}/{playlist.length}</span>
               <button type="button" onClick={() => setCurrent((c) => (c + 1) % playlist.length)}><ChevronRight size={15} /></button>
               <button type="button" onClick={() => inputRef.current?.click()}><FolderOpen size={15} /> Add</button>
+              <button type="button" onClick={() => void clearTracks()}><X size={15} /> Clear</button>
             </div>
+            <p className="media-status">Visualizer attached while playing. {musicStatus}</p>
             <div className="music-playlist">
-              {playlist.map((t, i) => <button key={t.url} type="button" className={clsx('playlist-item', i === current && 'active-track')} onClick={() => setCurrent(i)}><Music size={14} /><span>{t.name}</span></button>)}
+              {playlist.map((t, i) => (
+                <div key={t.id} className={clsx('playlist-item', i === current && 'active-track')}>
+                  <button type="button" onClick={() => setCurrent(i)}><Music size={14} /><span>{t.name}</span></button>
+                  <button type="button" aria-label={`Remove ${t.name}`} onClick={() => void removeTrack(t.id)}><X size={13} /></button>
+                </div>
+              ))}
             </div>
           </>}
     </div>
@@ -665,87 +1298,145 @@ function PdfViewerApp() {
   );
 }
 
-function AudioVisualizerApp() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+const matrixCells = Array.from({ length: 100 }, (_, index) => {
+  const row = Math.floor(index / 10);
+  const col = index % 10;
+  const type = index === 0 || index === 99 ? 'logo'
+    : [1, 8, 90, 98].includes(index) ? 'status'
+      : row === 0 || row === 9 || col === 0 || col === 9 ? 'data'
+        : (index + row) % 7 === 0 ? 'sprite'
+          : 'meter';
+  return { id: index, row, col, type };
+});
+
+function getVisualizerPalette(theme: ThanatosTheme) {
+  if (theme === 'lilly-garden') return { accent: '#9cff4f', hot: '#ff8a2a', dim: '#112610', sprite: 'lilly-garden' };
+  if (theme === 'zombitious') return { accent: '#83ff9b', hot: '#ff4fbd', dim: '#102818', sprite: 'zombitious' };
+  if (theme === 'lilly') return { accent: '#ff75ce', hot: '#a56bff', dim: '#24102f', sprite: 'lilly' };
+  return { accent: '#ff234f', hot: '#7b000d', dim: '#230307', sprite: 'death' };
+}
+
+function AudioVisualizerApp({ theme }: { theme: ThanatosTheme }) {
   const rafRef = useRef(0);
   const streamRef = useRef<MediaStream | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
-  const [status, setStatus] = useState('Share a browser tab with audio enabled to start.');
+  const [status, setStatus] = useState('Listening for Music Player audio. Capture is optional.');
   const [active, setActive] = useState(false);
-  const [level, setLevel] = useState(0);
+  const [pulse, setPulse] = useState<AudioPulse>(idlePulse);
+  const [error, setError] = useState(false);
+  const palette = getVisualizerPalette(theme);
 
   const stop = useCallback(() => {
     window.cancelAnimationFrame(rafRef.current);
     streamRef.current?.getTracks().forEach((t) => t.stop());
     void ctxRef.current?.close();
-    streamRef.current = null; ctxRef.current = null; setActive(false); setLevel(0);
-    document.documentElement.style.setProperty('--audio-level', '0');
-    document.documentElement.style.setProperty('--audio-bass', '0');
-    document.documentElement.style.setProperty('--audio-mid', '0');
+    streamRef.current = null;
+    ctxRef.current = null;
+    setActive(false);
+    setError(false);
+    setStatus('Listening for Music Player audio. Capture is optional.');
+    emitAudioPulse(idlePulse);
   }, []);
 
   useEffect(() => stop, [stop]);
 
+  useEffect(() => {
+    const onPulse = (event: Event) => {
+      const detail = (event as CustomEvent<AudioPulse>).detail;
+      if (!detail) return;
+      setPulse(detail);
+      if (detail.source === 'music') {
+        setError(false);
+        setStatus('Auto-attached to Music Player.');
+      } else if (detail.source === 'capture') {
+        setError(false);
+        setStatus('Audio capture active.');
+      }
+    };
+    window.addEventListener('thanatos:audio-pulse', onPulse);
+    return () => window.removeEventListener('thanatos:audio-pulse', onPulse);
+  }, []);
+
   const start = async () => {
     stop();
     try {
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        setError(true);
+        setStatus('Screen audio capture is not available in this browser. Play a track in Music Player instead.');
+        return;
+      }
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       const audioTracks = stream.getAudioTracks();
       stream.getVideoTracks().forEach((t) => t.stop());
-      if (!audioTracks.length) { stream.getTracks().forEach((t) => t.stop()); setStatus('No audio track. Enable "Share audio" when picking a tab.'); return; }
-      const actx = new AudioContext();
+      if (!audioTracks.length) {
+        stream.getTracks().forEach((t) => t.stop());
+        setError(true);
+        setStatus('No audio track. Enable "Share audio" when picking a tab, or use Music Player.');
+        return;
+      }
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) {
+        setError(true);
+        setStatus('Web Audio is not available in this browser.');
+        return;
+      }
+      const actx = new AudioCtx();
       const analyser = actx.createAnalyser();
       analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.72;
       actx.createMediaStreamSource(new MediaStream(audioTracks)).connect(analyser);
-      streamRef.current = stream; ctxRef.current = actx; setActive(true); setStatus('Audio curse active.');
+      streamRef.current = stream; ctxRef.current = actx; setActive(true); setError(false); setStatus('Audio capture active.');
       const freq = new Uint8Array(analyser.frequencyBinCount);
-      const wave = new Uint8Array(analyser.fftSize);
-      const canvas = canvasRef.current;
-      const c2d = canvas?.getContext('2d');
       const draw = () => {
-        analyser.getByteFrequencyData(freq); analyser.getByteTimeDomainData(wave);
-        const bass = freq.slice(0, 24).reduce((s, v) => s + v, 0) / (24 * 255);
-        const mid = freq.slice(24, 96).reduce((s, v) => s + v, 0) / (72 * 255);
-        const intensity = freq.reduce((s, v) => s + v, 0) / (freq.length * 255);
-        setLevel(intensity);
-        document.documentElement.style.setProperty('--audio-level', intensity.toFixed(3));
-        document.documentElement.style.setProperty('--audio-bass', bass.toFixed(3));
-        document.documentElement.style.setProperty('--audio-mid', mid.toFixed(3));
-        if (canvas && c2d) {
-          const w = canvas.clientWidth * devicePixelRatio, h = canvas.clientHeight * devicePixelRatio;
-          if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-          c2d.clearRect(0, 0, w, h); c2d.fillStyle = 'rgba(3,1,2,.44)'; c2d.fillRect(0, 0, w, h);
-          c2d.save(); c2d.translate(w / 2, h / 2);
-          const r = Math.min(w, h) * (0.16 + bass * 0.08);
-          for (let i = 0; i < 96; i++) {
-            const v = freq[i] / 255, len = r + v * Math.min(w, h) * 0.28;
-            c2d.rotate((Math.PI * 2) / 96);
-            c2d.strokeStyle = `rgba(255,${Math.floor(22 + v * 80)},${Math.floor(54 + mid * 80)},${0.35 + v * 0.55})`;
-            c2d.lineWidth = 2 + v * 5; c2d.beginPath(); c2d.moveTo(r, 0); c2d.lineTo(len, 0); c2d.stroke();
-          }
-          c2d.restore();
-          c2d.strokeStyle = `rgba(255,225,210,${0.26 + intensity * 0.42})`; c2d.lineWidth = 2; c2d.beginPath();
-          wave.forEach((v, i) => {
-            const x = (i / (wave.length - 1)) * w;
-            const y = h * 0.5 + ((v - 128) / 128) * h * (0.18 + mid * 0.18);
-            if (i === 0) c2d.moveTo(x, y);
-            else c2d.lineTo(x, y);
-          });
-          c2d.stroke();
-        }
-        rafRef.current = requestAnimationFrame(draw);
+        analyser.getByteFrequencyData(freq);
+        emitAudioPulse(getAudioPulse(freq, 'capture'));
+        rafRef.current = window.requestAnimationFrame(draw);
       };
       draw();
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Capture failed.'); stop(); }
+    } catch (e) {
+      stop();
+      setError(true);
+      setStatus(e instanceof Error ? e.message : 'Capture failed.');
+    }
   };
+
+  const sourceLabel = pulse.source === 'music' ? 'MUSIC PLAYER' : pulse.source === 'capture' ? 'TAB CAPTURE' : 'IDLE';
+  const matrixClass = error ? 'matrix-error' : pulse.level > 0.02 ? 'matrix-active' : 'matrix-idle';
 
   return (
     <div className="visualizer-app">
-      <canvas ref={canvasRef} />
+      <div
+        className={clsx('thanatos-matrix', matrixClass, `matrix-theme-${theme}`)}
+        style={{
+          '--matrix-accent': palette.accent,
+          '--matrix-hot': palette.hot,
+          '--matrix-dim': palette.dim,
+          '--audio-level': pulse.level,
+          '--audio-bass': pulse.bass,
+          '--audio-mid': pulse.mid
+        } as CSSProperties}
+      >
+        {matrixCells.map((cell) => {
+          const band = pulse.bands[cell.id % pulse.bands.length] ?? 0;
+          if (cell.type === 'logo') {
+            return <div key={cell.id} className="matrix-cell matrix-logo" style={{ '--cell-level': band } as CSSProperties}>XO</div>;
+          }
+          if (cell.type === 'status') {
+            return <div key={cell.id} className="matrix-cell data-text-cell" style={{ '--cell-level': band } as CSSProperties}>{cell.id < 10 ? sourceLabel : `${Math.round(pulse.level * 100)}%`}</div>;
+          }
+          if (cell.type === 'data') {
+            return <div key={cell.id} className="matrix-cell data-text-cell" style={{ '--cell-level': band } as CSSProperties}>R{cell.row}C{cell.col}<br />{Math.round(band * 99).toString().padStart(2, '0')}</div>;
+          }
+          if (cell.type === 'sprite') {
+            return <div key={cell.id} className="matrix-cell" style={{ '--cell-level': band } as CSSProperties}><span className={clsx('matrix-sprite', `sprite-${palette.sprite}`)} /></div>;
+          }
+          return <div key={cell.id} className="matrix-cell" style={{ '--cell-level': band } as CSSProperties}><span className="matrix-meter" /></div>;
+        })}
+      </div>
       <div className="visualizer-controls">
         <button type="button" onClick={() => void start()}><RadioTower size={15} /> Capture Audio</button>
         <button type="button" onClick={stop} disabled={!active}><X size={15} /> Stop</button>
-        <span>{Math.round(level * 100)}%</span>
+        <span>{sourceLabel}</span>
+        <span>{Math.round(pulse.level * 100)}%</span>
       </div>
       <p>{status}</p>
     </div>
@@ -936,31 +1627,45 @@ function HashGeneratorApp() {
   );
 }
 
-function PasswordGeneratorApp() {
-  type VaultEntry = {
-    id: string;
-    service: string;
-    email: string;
-    username: string;
-    password: string;
-    createdAt: string;
-  };
-
+function PasswordGeneratorApp({ session }: { session: AccessSession | null }) {
   const [service, setService] = useState('mumblechat-work');
-  const [domain, setDomain] = useState('mumblechat.online');
+  const [domain, setDomain] = useState(MAIL_DOMAIN);
   const [localPart, setLocalPart] = useState('');
   const [entry, setEntry] = useState<VaultEntry | null>(null);
-  const [vault, setVault] = useState<VaultEntry[]>(() => {
-    try {
-      return JSON.parse(readStoredValue('thanatos.accountVault') ?? '[]') as VaultEntry[];
-    } catch {
-      return [];
-    }
-  });
+  const [vault, setVault] = useState<VaultEntry[]>([]);
+  const [vaultStatus, setVaultStatus] = useState(session ? 'Decrypting vault...' : 'Run schadelkoph in Terminal to unlock the account vault.');
+  const importRef = useRef<HTMLInputElement>(null);
 
-  const persistVault = (nextVault: VaultEntry[]) => {
+  useEffect(() => {
+    let cancelled = false;
+    async function loadVault() {
+      if (!session) {
+        setVault([]);
+        setVaultStatus('Run schadelkoph in Terminal to unlock the account vault.');
+        return;
+      }
+      try {
+        await ensureVaultInitialized(session.vaultKey);
+        const entries = await readVault(session.vaultKey);
+        if (!cancelled) {
+          setVault(entries);
+          setVaultStatus(`Vault unlocked for ${session.username}.`);
+        }
+      } catch {
+        if (!cancelled) setVaultStatus('Vault decrypt failed. Log out and unlock again.');
+      }
+    }
+    void loadVault();
+    const onVault = () => void loadVault();
+    window.addEventListener('thanatos:vault-updated', onVault);
+    return () => { cancelled = true; window.removeEventListener('thanatos:vault-updated', onVault); };
+  }, [session]);
+
+  const persistVault = async (nextVault: VaultEntry[]) => {
+    if (!session) return;
     setVault(nextVault);
-    writeStoredValue('thanatos.accountVault', JSON.stringify(nextVault));
+    await writeVault(session.vaultKey, nextVault);
+    setVaultStatus(`Encrypted ${nextVault.length} account kit${nextVault.length === 1 ? '' : 's'}.`);
   };
 
   const generatePassword = () => {
@@ -992,19 +1697,60 @@ function PasswordGeneratorApp() {
   };
 
   const save = () => {
-    if (!entry) return;
-    persistVault([entry, ...vault.filter((item) => item.id !== entry.id)]);
+    if (!entry || !session) return;
+    void persistVault([entry, ...vault.filter((item) => item.id !== entry.id)]);
   };
 
-  const remove = (id: string) => persistVault(vault.filter((item) => item.id !== id));
+  const remove = (id: string) => { void persistVault(vault.filter((item) => item.id !== id)); };
 
   const copyKit = (item = entry) => {
     if (!item) return;
-    cp(`service=${item.service}\nemail=${item.email}\nusername=${item.username}\npassword=${item.password}`);
+    cp(`service=${item.service}\nemail=${item.email}\nusername=${item.username}\npassword=${item.password}\nwebmail=${MAIL_WEBMAIL_URL}`);
   };
+
+  const exportBackup = () => {
+    const access = readStoredValue(ACCESS_KEY);
+    const secureVault = readStoredValue(SECURE_VAULT_KEY);
+    if (!access || !secureVault) return;
+    const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), access: JSON.parse(access), secureVault: JSON.parse(secureVault) }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `thanatos-vault-backup-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importBackup = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const backup = JSON.parse(await file.text()) as { version?: number; access?: AccessStore; secureVault?: EncryptedPayload };
+      if (backup.version !== 1 || !backup.access || !backup.secureVault) throw new Error('Invalid backup');
+      writeStoredValue(ACCESS_KEY, JSON.stringify(backup.access));
+      writeStoredValue(SECURE_VAULT_KEY, JSON.stringify(backup.secureVault));
+      setVaultStatus('Backup imported. Run schadelkoph again with username, password, and recovery context.');
+    } catch {
+      setVaultStatus('Backup import failed.');
+    }
+  };
+
+  if (!session) {
+    return (
+      <div className="account-vault locked-vault">
+        <div className="vault-lock-panel">
+          <Lock size={46} />
+          <h3>Schadelkoph Gate Sealed</h3>
+          <p>{vaultStatus}</p>
+          <button type="button" onClick={() => importRef.current?.click()}><FilePlus2 size={15} /> Import encrypted backup</button>
+          <input ref={importRef} type="file" accept="application/json" hidden onChange={(event) => void importBackup(event.target.files?.[0])} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="account-vault">
+      <input ref={importRef} type="file" accept="application/json" hidden onChange={(event) => void importBackup(event.target.files?.[0])} />
       <div className="account-generator">
         <label>
           Service
@@ -1036,15 +1782,20 @@ function PasswordGeneratorApp() {
             <Copy size={15} /> Copy kit
           </button>
         </div>
-        <small>Real mailbox creation comes next after DNS points mail.mumblechat.online at the OVH VPS.</small>
+        <small>Mailboxes are manual in Mailu for now. This vault stores encrypted account kits only.</small>
       </div>
 
       <div className="mail-dns-card">
-        <strong>Mail server DNS for Porkbun</strong>
-        <code>A    mail    139.99.200.187</code>
-        <code>MX   @       mail.mumblechat.online    priority 10</code>
-        <code>TXT  @       v=spf1 mx -all</code>
-        <code>{'PTR  139.99.200.187 -> mail.mumblechat.online in OVH'}</code>
+        <strong>MumbleChat Mail</strong>
+        <code>domain: {MAIL_DOMAIN}</code>
+        <code>webmail: {MAIL_WEBMAIL_URL}</code>
+        <code>admin: {MAIL_ADMIN_URL}</code>
+        <div className="account-actions">
+          <button type="button" onClick={() => cp(MAIL_WEBMAIL_URL)}><Copy size={14} /> Copy webmail</button>
+          <button type="button" onClick={exportBackup}><Save size={14} /> Export backup</button>
+          <button type="button" onClick={() => importRef.current?.click()}><FilePlus2 size={14} /> Import backup</button>
+        </div>
+        <small>{vaultStatus}</small>
       </div>
 
       <div className="vault-list">
@@ -1054,14 +1805,15 @@ function PasswordGeneratorApp() {
             <span>{item.email}</span>
             <code>{item.password}</code>
             <small>{item.createdAt}</small>
-            <button type="button" onClick={() => copyKit(item)}>
-              <Copy size={14} /> Copy
-            </button>
+            <button type="button" onClick={() => cp(item.email)}><Copy size={14} /> Email</button>
+            <button type="button" onClick={() => cp(item.username)}><Copy size={14} /> User</button>
+            <button type="button" onClick={() => cp(item.password)}><Copy size={14} /> Pass</button>
+            <button type="button" onClick={() => copyKit(item)}><Copy size={14} /> Kit</button>
             <button type="button" onClick={() => remove(item.id)} aria-label={`Delete ${item.service}`}>
               <X size={14} />
             </button>
           </div>
-        )) : <p>Saved account kits stay in this browser until the Mailu bridge is wired.</p>}
+        )) : <p>No encrypted account kits yet.</p>}
       </div>
     </div>
   );
@@ -1468,11 +2220,12 @@ function GenericWorkingApp({ app }: { app: ThanatosApp }) {
 
 // ─── routing ──────────────────────────────────────────────────────────────────
 
-function AppContent({ app, openWindows, theme, onThemeChange }: { app: ThanatosApp; openWindows: OpenWindow[]; theme: ThanatosTheme; onThemeChange: (t: ThanatosTheme) => void }) {
+function AppContent({ app, openWindows, theme, session, onSessionChange, onThemeChange }: { app: ThanatosApp; openWindows: OpenWindow[]; theme: ThanatosTheme; session: AccessSession | null; onSessionChange: (session: AccessSession | null) => void; onThemeChange: (t: ThanatosTheme) => void }) {
   if (app.locked) return <PrivateGate app={app} />;
   switch (app.id) {
-    case 'terminal': return <TerminalApp openWindows={openWindows} />;
+    case 'terminal': return <TerminalApp openWindows={openWindows} session={session} onSessionChange={onSessionChange} />;
     case 'files': return <FileManagerApp />;
+    case 'mail': return <MailApp />;
     case 'mumblechat': return <MumbleChatApp />;
     case 'settings': return <SettingsApp theme={theme} onThemeChange={onThemeChange} />;
     case 'tasks': return <TaskManagerApp openWindows={openWindows} />;
@@ -1489,7 +2242,7 @@ function AppContent({ app, openWindows, theme, onThemeChange }: { app: ThanatosA
     case 'image': return <ImageViewerApp />;
     case 'music': return <MusicPlayerApp />;
     case 'pdf': return <PdfViewerApp />;
-    case 'visualizer': return <AudioVisualizerApp />;
+    case 'visualizer': return <AudioVisualizerApp theme={theme} />;
     case 'vscode': return <CodeStudioApp />;
     case 'compiler': return <CompilerApp />;
     case 'git': return <GitClientApp />;
@@ -1498,7 +2251,7 @@ function AppContent({ app, openWindows, theme, onThemeChange }: { app: ThanatosA
     case 'diff': return <DiffCheckerApp />;
     case 'hex': return <HexEditorApp />;
     case 'hash': return <HashGeneratorApp />;
-    case 'passwords': return <PasswordGeneratorApp />;
+    case 'passwords': return <PasswordGeneratorApp session={session} />;
     case 'regex': return <RegexTesterApp />;
     case 'base64': return <Base64App />;
     case 'qr': return <QrCodeApp />;
@@ -1515,7 +2268,7 @@ function AppContent({ app, openWindows, theme, onThemeChange }: { app: ThanatosA
 
 // ─── window ───────────────────────────────────────────────────────────────────
 
-function DesktopWindow({ openWindow, active, openWindows, theme, onThemeChange, onFocus, onMove, onResize, onClose, onMinimize, onMaximize }: { openWindow: OpenWindow; active: boolean; openWindows: OpenWindow[]; theme: ThanatosTheme; onThemeChange: (t: ThanatosTheme) => void; onFocus: () => void; onMove: (x: number, y: number) => void; onResize: (width: number, height: number, x: number, y: number) => void; onClose: () => void; onMinimize: () => void; onMaximize: () => void }) {
+function DesktopWindow({ openWindow, active, openWindows, theme, session, onSessionChange, onThemeChange, onFocus, onMove, onResize, onClose, onMinimize, onMaximize }: { openWindow: OpenWindow; active: boolean; openWindows: OpenWindow[]; theme: ThanatosTheme; session: AccessSession | null; onSessionChange: (session: AccessSession | null) => void; onThemeChange: (t: ThanatosTheme) => void; onFocus: () => void; onMove: (x: number, y: number) => void; onResize: (width: number, height: number, x: number, y: number) => void; onClose: () => void; onMinimize: () => void; onMaximize: () => void }) {
   if (openWindow.minimized) return null;
   const size = openWindow.maximized ? { width: Math.max(360, window.innerWidth - 24), height: Math.max(260, window.innerHeight - 86) } : { width: openWindow.width, height: openWindow.height };
   const position = openWindow.maximized ? { x: 12, y: 12 } : { x: openWindow.x, y: openWindow.y };
@@ -1543,7 +2296,7 @@ function DesktopWindow({ openWindow, active, openWindows, theme, onThemeChange, 
           <button type="button" aria-label="Close" onClick={onClose}><X size={15} /></button>
         </div>
       </div>
-      <div className="window-content"><AppContent app={openWindow.app} openWindows={openWindows} theme={theme} onThemeChange={onThemeChange} /></div>
+      <div className="window-content"><AppContent app={openWindow.app} openWindows={openWindows} theme={theme} session={session} onSessionChange={onSessionChange} onThemeChange={onThemeChange} /></div>
     </Rnd>
   );
 }
@@ -1566,10 +2319,31 @@ function StartMenu({ onLaunch }: { onLaunch: (app: ThanatosApp) => void }) {
 
 // ─── main desktop ─────────────────────────────────────────────────────────────
 
+function getDefaultWindowSize(appId: string) {
+  if (appId === 'mumblechat') return { width: Math.min(1160, window.innerWidth - 48), height: Math.min(760, window.innerHeight - 112), maximized: true };
+  if (appId === 'visualizer') return { width: 760, height: 720, maximized: false };
+  if (appId === 'music') return { width: 760, height: 620, maximized: false };
+  if (appId === 'passwords') return { width: 900, height: 680, maximized: false };
+  return { width: 780, height: 520, maximized: false };
+}
+
+function readWindowState() {
+  try {
+    return JSON.parse(readStoredValue(WINDOW_STATE_KEY) ?? '{}') as Record<string, Pick<OpenWindow, 'x' | 'y' | 'width' | 'height' | 'maximized'>>;
+  } catch {
+    return {};
+  }
+}
+
+function writeWindowState(appId: string, state: Pick<OpenWindow, 'x' | 'y' | 'width' | 'height' | 'maximized'>) {
+  writeStoredValue(WINDOW_STATE_KEY, JSON.stringify({ ...readWindowState(), [appId]: state }));
+}
+
 export function ThanatosDesktop() {
   const [booted, setBooted] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
   const [windows, setWindows] = useState<OpenWindow[]>([]);
+  const [session, setSession] = useState<AccessSession | null>(null);
   const [clock, setClock] = useState(() => new Date());
   const [theme, setTheme] = useState<ThanatosTheme>(() => {
     const s = localStorage.getItem('thanatos.theme');
@@ -1587,16 +2361,20 @@ export function ThanatosDesktop() {
       if (ex) return ws.map((w) => w.id === ex.id ? { ...w, minimized: false, z: topZ + 1 } : w);
       const id = nanoid();
       const placementSeed = Array.from(id).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-      const defaultWidth = app.id === 'mumblechat' ? Math.min(1160, window.innerWidth - 48) : 780;
-      const defaultHeight = app.id === 'mumblechat' ? Math.min(760, window.innerHeight - 112) : 520;
+      const saved = readWindowState()[app.id];
+      const defaults = getDefaultWindowSize(app.id);
+      const defaultWidth = saved?.width ?? defaults.width;
+      const defaultHeight = saved?.height ?? defaults.height;
+      const defaultX = saved?.x ?? (app.id === 'mumblechat' ? Math.max(18, (window.innerWidth - defaultWidth) / 2) : 58 + (placementSeed % 7) * 28);
+      const defaultY = saved?.y ?? (app.id === 'mumblechat' ? 18 : 44 + (placementSeed % 5) * 24);
       return [...ws, {
         id,
         app,
         z: topZ + 1,
         minimized: false,
-        maximized: app.id === 'mumblechat',
-        x: app.id === 'mumblechat' ? Math.max(18, (window.innerWidth - defaultWidth) / 2) : 58 + (placementSeed % 7) * 28,
-        y: app.id === 'mumblechat' ? 18 : 44 + (placementSeed % 5) * 24,
+        maximized: saved?.maximized ?? defaults.maximized,
+        x: Math.max(8, Math.min(defaultX, window.innerWidth - 120)),
+        y: Math.max(8, Math.min(defaultY, window.innerHeight - 140)),
         width: defaultWidth,
         height: defaultHeight
       }];
@@ -1604,7 +2382,12 @@ export function ThanatosDesktop() {
     setStartOpen(false);
   };
 
-  const patch = (id: string, p: Partial<OpenWindow>) => setWindows((ws) => ws.map((w) => w.id === id ? { ...w, ...p } : w));
+  const patch = (id: string, p: Partial<OpenWindow>) => setWindows((ws) => ws.map((w) => {
+    if (w.id !== id) return w;
+    const next = { ...w, ...p };
+    writeWindowState(next.app.id, { x: next.x, y: next.y, width: next.width, height: next.height, maximized: next.maximized });
+    return next;
+  }));
 
   return (
     <main className={`desktop-shell theme-${theme}`}>
@@ -1620,7 +2403,7 @@ export function ThanatosDesktop() {
       <div className="death-brand"><Skull size={38} /><span>THANATOS</span></div>
       <div className="window-layer">
         {windows.map((w) => (
-          <DesktopWindow key={w.id} openWindow={w} openWindows={windows} theme={theme} onThemeChange={changeTheme} active={w.id === activeId}
+          <DesktopWindow key={w.id} openWindow={w} openWindows={windows} theme={theme} session={session} onSessionChange={setSession} onThemeChange={changeTheme} active={w.id === activeId}
             onFocus={() => patch(w.id, { z: topZ + 1 })}
             onMove={(x, y) => patch(w.id, { x, y })}
             onResize={(width, height, x, y) => patch(w.id, { width, height, x, y })}

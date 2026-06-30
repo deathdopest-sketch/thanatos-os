@@ -1528,7 +1528,8 @@ body {
   scrollbar-color: rgba(255, 35, 96, 0.3) transparent;
 }
 
-.music-track-item {
+.music-track-item,
+.playlist-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1541,16 +1542,47 @@ body {
   overflow: hidden;
 }
 
-.music-track-item:hover {
+.playlist-item {
+  justify-content: space-between;
+  padding: 0;
+}
+
+.playlist-item > button {
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.playlist-item > button:first-child {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.playlist-item > button:last-child {
+  flex: 0 0 auto;
+  color: rgba(247, 238, 233, 0.45);
+}
+
+.music-track-item:hover,
+.playlist-item:hover {
   background: rgba(255, 35, 96, 0.1);
 }
 
-.music-track-item.active {
+.music-track-item.active,
+.playlist-item.active-track {
   background: rgba(255, 35, 96, 0.18);
   color: #ff2360;
 }
 
-.music-track-item span {
+.music-track-item span,
+.playlist-item span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2399,13 +2431,187 @@ body {
   overflow: hidden;
 }
 
-.visualizer-canvas {
-  width: 100%;
-  flex: 1;
-  min-height: 0;
+.thanatos-matrix {
+  --matrix-accent: #ff234f;
+  --matrix-hot: #7b000d;
+  --matrix-dim: #230307;
+  width: min(100%, 72vh);
+  max-width: 560px;
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-rows: repeat(10, minmax(0, 1fr));
+  gap: 2px;
+  padding: 6px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--matrix-hot) 18%, transparent), transparent 42%),
+    linear-gradient(145deg, rgba(0, 0, 0, 0.92), color-mix(in srgb, var(--matrix-dim) 72%, #000 28%));
+  border: 1px solid color-mix(in srgb, var(--matrix-accent) 45%, transparent);
   border-radius: 8px;
-  background: #000;
-  display: block;
+  box-shadow:
+    0 0 calc(18px + var(--audio-level, 0) * 36px) color-mix(in srgb, var(--matrix-accent) 22%, transparent),
+    inset 0 0 38px rgba(0, 0, 0, 0.82);
+  overflow: hidden;
+  position: relative;
+}
+
+.thanatos-matrix::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.035) 1px, transparent 1px, transparent 5px),
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--matrix-accent) calc(4% + var(--audio-mid, 0) * 12%), transparent), transparent);
+  mix-blend-mode: screen;
+  opacity: calc(0.22 + var(--audio-level, 0) * 0.42);
+}
+
+.matrix-cell {
+  --cell-level: 0;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--matrix-accent) calc(8% + var(--cell-level) * 42%), transparent), transparent 58%),
+    color-mix(in srgb, var(--matrix-dim) 72%, #030303 28%);
+  border: 1px solid color-mix(in srgb, var(--matrix-accent) calc(18% + var(--cell-level) * 42%), rgba(0, 0, 0, 0.7));
+  box-shadow:
+    inset 0 0 12px rgba(0, 0, 0, 0.78),
+    0 0 calc(var(--cell-level) * 14px) color-mix(in srgb, var(--matrix-accent) 48%, transparent);
+  transform: scale(calc(1 + var(--cell-level) * 0.045));
+  transition: transform 80ms linear, border-color 80ms linear, box-shadow 80ms linear;
+}
+
+.matrix-cell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 45%, color-mix(in srgb, var(--matrix-hot) 28%, transparent), transparent 56%);
+  opacity: calc(var(--cell-level) * 0.85);
+}
+
+.data-text-cell {
+  padding: 3px;
+  color: color-mix(in srgb, var(--matrix-accent) 84%, #fff 16%);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(7px, 1.15vh, 10px);
+  line-height: 1.15;
+  text-align: center;
+  text-transform: uppercase;
+  word-break: break-word;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--matrix-accent) 72%, transparent);
+}
+
+.matrix-logo {
+  color: color-mix(in srgb, var(--matrix-hot) 55%, #fff 45%);
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(14px, 3vh, 28px);
+  font-weight: 900;
+  text-shadow:
+    0 0 8px color-mix(in srgb, var(--matrix-hot) 70%, transparent),
+    0 0 18px color-mix(in srgb, var(--matrix-accent) 50%, transparent);
+}
+
+.matrix-meter {
+  width: 24%;
+  height: calc(16% + var(--cell-level) * 78%);
+  min-height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--matrix-hot) 76%, #fff 24%), var(--matrix-accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--matrix-accent) 65%, transparent);
+  align-self: flex-end;
+  margin-bottom: 8%;
+}
+
+.matrix-sprite {
+  width: 82%;
+  height: 82%;
+  border-radius: 6px;
+  background-image: url('/assets/lilly-garden-thanatos-theme.png');
+  background-size: 500% 500%;
+  background-position:
+    calc((var(--audio-bass, 0) * 100%) - 25%)
+    calc((var(--audio-mid, 0) * 100%) - 25%);
+  filter: saturate(calc(0.9 + var(--audio-level, 0) * 1.6)) contrast(calc(1 + var(--audio-bass, 0) * 0.55));
+  opacity: calc(0.45 + var(--cell-level) * 0.55);
+}
+
+.sprite-death {
+  mix-blend-mode: luminosity;
+}
+
+.sprite-zombitious {
+  mix-blend-mode: screen;
+  filter: hue-rotate(80deg) saturate(calc(1.1 + var(--audio-level, 0) * 1.4));
+}
+
+.sprite-lilly {
+  filter: hue-rotate(260deg) saturate(calc(1 + var(--audio-level, 0) * 1.4));
+}
+
+.matrix-idle {
+  opacity: 0.86;
+}
+
+.matrix-active .matrix-cell {
+  animation: matrix-breathe 520ms ease-in-out infinite alternate;
+}
+
+.matrix-error {
+  animation: matrix-error-pulse 360ms steps(2) infinite;
+}
+
+.matrix-error .matrix-cell {
+  border-color: rgba(255, 42, 42, 0.7);
+}
+
+.visualizer-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.visualizer-controls span {
+  min-width: 64px;
+  text-align: center;
+  color: rgba(247, 238, 233, 0.68);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.visualizer-app p {
+  max-width: 560px;
+  margin: 0;
+  color: rgba(247, 238, 233, 0.58);
+  font-size: 12px;
+  text-align: center;
+}
+
+@keyframes matrix-breathe {
+  from {
+    filter: brightness(0.9);
+  }
+  to {
+    filter: brightness(calc(1.05 + var(--audio-level, 0) * 0.65));
+  }
+}
+
+@keyframes matrix-error-pulse {
+  0%, 100% {
+    filter: saturate(1);
+  }
+  50% {
+    filter: saturate(2) brightness(1.3);
+  }
 }
 
 /* ── Notes / Sticky ──────────────────────────────────────────────── */
@@ -2646,8 +2852,40 @@ body {
   scrollbar-color: rgba(var(--curse-primary), 0.3) transparent;
 }
 
+.locked-vault {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vault-lock-panel {
+  display: grid;
+  width: min(100%, 460px);
+  gap: 12px;
+  justify-items: center;
+  padding: 24px;
+  border: 1px solid rgba(var(--curse-primary), 0.28);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(var(--curse-primary), 0.16), transparent 58%),
+    rgba(0, 0, 0, 0.48);
+  text-align: center;
+}
+
+.vault-lock-panel h3,
+.mail-app h3 {
+  margin: 0;
+  color: rgb(var(--curse-primary));
+  font-family: 'Playfair Display', serif;
+}
+
+.vault-lock-panel p {
+  margin: 0;
+  color: rgba(247, 238, 233, 0.62);
+}
+
 .vault-row {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) repeat(5, auto);
   align-items: center;
 }
 
@@ -3067,6 +3305,27 @@ body {
   padding: 20px;
   color: rgba(247, 238, 233, 0.45);
   text-align: center;
+}
+
+.mail-app p {
+  max-width: 520px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.mail-app code {
+  padding: 8px 12px;
+  border: 1px solid rgba(var(--curse-primary), 0.2);
+  border-radius: 6px;
+  color: rgba(247, 238, 233, 0.76);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.mail-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 
 /* ── MumbleChat ──────────────────────────────────────────────────── */
