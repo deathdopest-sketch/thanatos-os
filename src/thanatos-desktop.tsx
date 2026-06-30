@@ -160,7 +160,7 @@ declare global {
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const CMDS = ['help', 'status', 'apps', 'date', 'skull', 'clear', 'ls', 'whoami', 'uname', 'rip <username>', 'schadelkoph', 'schadelkoph import <invite>'];
+const PUBLIC_CMDS = ['help', 'status', 'apps', 'date', 'skull', 'clear', 'ls', 'whoami', 'uname'];
 
 const QUOTES = [
   'EVERY PROCESS ENDS.', 'THE KERNEL REMEMBERS THE DEAD.', 'ALL WINDOWS CLOSE EVENTUALLY.',
@@ -599,7 +599,7 @@ function LegacyTerminalApp({ openWindows }: { openWindows: OpenWindow[] }) {
     if (!cmd) return;
     if (cmd === 'clear') { setLines([]); setInput(''); return; }
     const out: Record<string, string[]> = {
-      help: [`commands: ${CMDS.join(', ')}`],
+      help: [`commands: ${PUBLIC_CMDS.join(', ')}`],
       status: ['kernel: THANATOS v2.0', `windows: ${openWindows.length}`, 'vfs: indexeddb persistent', 'remote: offline', 'theme: death'],
       apps: appRegistry.slice(0, 20).map((a) => `${a.id.padEnd(18)} ${a.name}`),
       date: [new Date().toString()],
@@ -857,7 +857,7 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
       return;
     }
     const out: Record<string, string[]> = {
-      help: [`commands: ${CMDS.join(', ')}`],
+      help: [`commands: ${PUBLIC_CMDS.join(', ')}`],
       status: ['kernel: THANATOS v2.0', `windows: ${openWindows.length}`, 'vfs: indexeddb persistent', 'remote: offline', 'theme: death'],
       apps: appRegistry.slice(0, 20).map((a) => `${a.id.padEnd(18)} ${a.name}`),
       date: [new Date().toString()],
