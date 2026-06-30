@@ -64,6 +64,7 @@ import {
 import clsx from 'clsx';
 import { nanoid } from 'nanoid';
 import { appCategories, appRegistry, type AppCategory, type ThanatosApp } from './apps';
+import LillyClock from './components/LillyClock';
 import { normalizePath } from './lib/vfs';
 import { useVfsListing } from './lib/use-vfs-listing';
 
@@ -431,9 +432,7 @@ function WeatherApp() {
 }
 
 function ClockApp() {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => { const i = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(i); }, []);
-  return <div className="clock-panel"><strong>{now.toLocaleTimeString()}</strong><span>{now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span></div>;
+  return <LillyClock />;
 }
 
 function SettingsApp({ theme, onThemeChange }: { theme: ThanatosTheme; onThemeChange: (t: ThanatosTheme) => void }) {
