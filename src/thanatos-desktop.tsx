@@ -602,7 +602,7 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
     } else {
       const ownerKey = await derivePassKey(ownerPass, store.ownerSalt);
       if (await keyVerifier(ownerKey) !== store.ownerVerifier) {
-        pushLines(['owner passphrase rejected.']);
+        pushLines(['owner passphrase rejected.', 'use the exact passphrase set on the first successful rip command.']);
         return;
       }
     }
@@ -692,7 +692,7 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
         await finishRip(flow.username, value);
       } else {
         setFlow({ kind: 'idle' });
-        pushLines(['owner passphrase mismatch. rip aborted.']);
+        pushLines(['owner passphrase mismatch. rip aborted.', 'nothing was saved. run rip again when both entries match.']);
       }
       return;
     }
@@ -748,6 +748,7 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
 
   const run = async () => {
     const cmd = input.trim();
+    const commandKey = cmd.toLowerCase();
     if (!cmd) return;
     setInput('');
     if (flow.kind !== 'idle') {
@@ -755,23 +756,23 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
       await handleFlow(cmd);
       return;
     }
-    if (cmd === 'clear') { setLines([]); return; }
-    if (cmd === 'schadelkoph logout') {
+    if (commandKey === 'clear') { setLines([]); return; }
+    if (commandKey === 'schadelkoph logout') {
       onSessionChange(null);
-      pushLines(['$ schadelkoph logout', 'reaper eyes sealed.']);
+      pushLines([`$ ${cmd}`, 'reaper eyes sealed.']);
       return;
     }
-    if (cmd === 'schadelkoph whoami') {
-      pushLines(['$ schadelkoph whoami', session ? `${session.username} since ${new Date(session.startedAt).toLocaleTimeString()}` : 'no one. the vault is blind.']);
+    if (commandKey === 'schadelkoph whoami') {
+      pushLines([`$ ${cmd}`, session ? `${session.username} since ${new Date(session.startedAt).toLocaleTimeString()}` : 'no one. the vault is blind.']);
       return;
     }
-    if (cmd === 'schadelkoph') {
+    if (commandKey === 'schadelkoph') {
       setFlow({ kind: 'schadelkoph-username' });
-      pushLines(['$ schadelkoph', 'And who are you in Death']);
+      pushLines([`$ ${cmd}`, 'And who are you in Death']);
       return;
     }
-    if (cmd.startsWith('rip ')) {
-      const username = normalizeUser(cmd.slice(4));
+    if (commandKey.startsWith('rip ')) {
+      const username = normalizeUser(cmd.slice(cmd.indexOf(' ') + 1));
       if (!username) {
         pushLines(['$ rip', 'usage: rip <username>']);
         return;
@@ -791,7 +792,7 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
       whoami: [session ? `${session.username} (schadelkoph)` : 'root - local shell only'],
       uname: ['Thanatos OS 2.0 Death-Kernel x86_death']
     };
-    pushLines([`$ ${cmd}`, ...(out[cmd] ?? [`not found: ${cmd}`])]);
+    pushLines([`$ ${cmd}`, ...(out[commandKey] ?? [`not found: ${cmd}`])]);
   };
 
   return (
