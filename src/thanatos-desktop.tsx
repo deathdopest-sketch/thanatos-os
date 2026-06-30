@@ -106,6 +106,12 @@ type AccessStore = {
   ownerVerifier?: string;
   users: AccessUser[];
 };
+type AccessInvite = {
+  version: 1;
+  kind: 'thanatos.pending-user';
+  createdAt: string;
+  user: AccessUser;
+};
 type EncryptedPayload = {
   iv: string;
   data: string;
@@ -154,7 +160,7 @@ declare global {
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const CMDS = ['help', 'status', 'apps', 'date', 'skull', 'clear', 'ls', 'whoami', 'uname', 'rip <username>', 'schadelkoph'];
+const CMDS = ['help', 'status', 'apps', 'date', 'skull', 'clear', 'ls', 'whoami', 'uname', 'rip <username>', 'schadelkoph', 'schadelkoph import <invite>'];
 
 const QUOTES = [
   'EVERY PROCESS ENDS.', 'THE KERNEL REMEMBERS THE DEAD.', 'ALL WINDOWS CLOSE EVENTUALLY.',
@@ -384,6 +390,16 @@ function b64ToBytes(value: string) {
   return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
 }
 
+function b64UrlEncode(value: string) {
+  return bytesToB64(textEncoder.encode(value)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
+function b64UrlDecode(value: string) {
+  const normalized = value.replaceAll('-', '+').replaceAll('_', '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  return textDecoder.decode(b64ToBytes(padded));
+}
+
 function exactBuffer(bytes: Uint8Array) {
   return bytes.slice().buffer as ArrayBuffer;
 }
@@ -462,6 +478,43 @@ function readAccessStore(): AccessStore {
 function writeAccessStore(store: AccessStore) {
   writeStoredValue(ACCESS_KEY, JSON.stringify(store));
   window.dispatchEvent(new CustomEvent('thanatos:access-store'));
+}
+
+function makeAccessInvite(user: AccessUser) {
+  const invite: AccessInvite = {
+    version: 1,
+    kind: 'thanatos.pending-user',
+    createdAt: new Date().toISOString(),
+    user
+  };
+  return `thanatos_invite_${b64UrlEncode(JSON.stringify(invite))}`;
+}
+
+function readAccessInvite(code: string): AccessInvite {
+  const trimmed = code.trim();
+  if (!trimmed.startsWith('thanatos_invite_')) throw new Error('Invalid invite prefix');
+  const parsed = JSON.parse(b64UrlDecode(trimmed.slice('thanatos_invite_'.length))) as AccessInvite;
+  if (parsed.version !== 1 || parsed.kind !== 'thanatos.pending-user' || parsed.user?.status !== 'pending') {
+    throw new Error('Invalid invite payload');
+  }
+  if (!parsed.user.usernameHash || !parsed.user.displayName || !parsed.user.recoveryHash || !parsed.user.recoverySalt || !parsed.user.pendingWrappedVaultKey) {
+    throw new Error('Incomplete invite payload');
+  }
+  return parsed;
+}
+
+function importAccessInvite(code: string) {
+  const invite = readAccessInvite(code);
+  const store = readAccessStore();
+  const existing = store.users.find((user) => user.usernameHash === invite.user.usernameHash);
+  if (existing?.status === 'active') return { status: 'active' as const, username: existing.displayName };
+  if (existing?.status === 'pending') {
+    Object.assign(existing, invite.user);
+  } else {
+    store.users.push(invite.user);
+  }
+  writeAccessStore(store);
+  return { status: 'pending' as const, username: invite.user.displayName };
 }
 
 async function readVault(vaultKey: CryptoKey): Promise<VaultEntry[]> {
@@ -621,16 +674,22 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
     }
     const vaultKey = session?.vaultKey ?? await generateVaultKey();
     await ensureVaultInitialized(vaultKey);
-    store.users.push({
+    const pendingUser: AccessUser = {
       usernameHash,
       displayName: normalized,
       status: 'pending',
       recoveryHash: await sha256(`recovery:${recoveryId}`),
       recoverySalt,
       pendingWrappedVaultKey: await wrapVaultKey(recoveryKey, vaultKey)
-    });
+    };
+    store.users.push(pendingUser);
     writeAccessStore(store);
-    pushLines([`marked ${normalized}.`, `recovery id: ${recoveryId}`, 'give them the username and recovery id. lose it and the gate stays shut.']);
+    pushLines([
+      `marked ${normalized}.`,
+      `recovery id: ${recoveryId}`,
+      `invite code: ${makeAccessInvite(pendingUser)}`,
+      'give them username + recovery id + invite code. they import it once, then claim with schadelkoph.'
+    ]);
   };
 
   const claimUser = async (username: string, recoveryId: string, password: string) => {
@@ -757,6 +816,21 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
       return;
     }
     if (commandKey === 'clear') { setLines([]); return; }
+    if (commandKey.startsWith('schadelkoph import ')) {
+      const inviteCode = cmd.slice(cmd.toLowerCase().indexOf(' import ') + ' import '.length).trim();
+      try {
+        const imported = importAccessInvite(inviteCode);
+        pushLines([
+          '$ schadelkoph import [invite]',
+          imported.status === 'active'
+            ? `${imported.username} is already claimed on this browser.`
+            : `invite imported for ${imported.username}. run schadelkoph to claim with username and recovery id.`
+        ]);
+      } catch {
+        pushLines(['$ schadelkoph import [invite]', 'invite rejected. paste the full thanatos_invite code.']);
+      }
+      return;
+    }
     if (commandKey === 'schadelkoph logout') {
       onSessionChange(null);
       pushLines([`$ ${cmd}`, 'reaper eyes sealed.']);
