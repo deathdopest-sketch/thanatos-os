@@ -2585,11 +2585,30 @@ export function ThanatosDesktop() {
       </div>
       <AnimatePresence>{startOpen ? <StartMenu onLaunch={launch} /> : null}</AnimatePresence>
       <nav className="taskbar">
-        <button type="button" className="start-button" onClick={() => setStartOpen((v) => !v)}><Skull size={19} /><span>Thanatos</span></button>
-        <div className="task-items">
-          {windows.map((w) => <button key={w.id} type="button" className={clsx('task-item', w.id === activeId && !w.minimized && 'active-task')} onClick={() => patch(w.id, { minimized: false, z: topZ + 1 })}><w.app.icon size={16} /><span>{w.app.name}</span></button>)}
+        <button type="button" className={clsx('tb-start', startOpen && 'open')} onClick={() => setStartOpen((v) => !v)}>
+          <Skull size={16} />
+          <span>Thanatos</span>
+        </button>
+        <div className="tb-apps">
+          {windows.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              className={clsx('tb-app', w.id === activeId && !w.minimized && 'active')}
+              onClick={() => patch(w.id, { minimized: false, z: topZ + 1 })}
+            >
+              <w.app.icon size={14} />
+              <span className="tb-app-label">{w.app.name}</span>
+            </button>
+          ))}
         </div>
-        <div className="tray"><ShieldCheck size={17} /><span>{clock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
+        <div className="tb-tray">
+          <ShieldCheck size={14} />
+          <div className="tb-clock">
+            <span className="tb-clock-time">{clock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="tb-clock-date">{clock.toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+          </div>
+        </div>
       </nav>
     </main>
   );
