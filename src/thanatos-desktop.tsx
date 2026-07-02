@@ -26,11 +26,13 @@ import {
   ChevronRight,
   ChevronUp,
   CloudSun,
+  Code2,
   Copy,
   Eraser,
   Eye,
   File,
   FilePlus2,
+  Film,
   Fingerprint,
   Folder,
   FolderOpen,
@@ -38,11 +40,13 @@ import {
   Globe,
   Hash,
   Image,
+  LayoutGrid,
   Lock,
   Mail,
   Maximize2,
   Mic,
   Minus,
+  Monitor,
   Music,
   Network,
   Paintbrush,
@@ -53,6 +57,7 @@ import {
   Save,
   Search,
   Send,
+  Shield,
   ShieldCheck,
   Shuffle,
   Skull,
@@ -61,6 +66,7 @@ import {
   Wifi,
   X
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { nanoid } from 'nanoid';
 import { appCategories, appRegistry, type AppCategory, type ThanatosApp } from './apps';
@@ -2378,16 +2384,106 @@ function DesktopWindow({ openWindow, active, openWindows, theme, session, onSess
 
 // ─── start menu ───────────────────────────────────────────────────────────────
 
+const SM_CATS: { id: AppCategory | 'All'; label: string; Icon: LucideIcon }[] = [
+  { id: 'All', label: 'All Apps', Icon: LayoutGrid },
+  { id: 'System', label: 'System', Icon: Monitor },
+  { id: 'Media', label: 'Media', Icon: Film },
+  { id: 'Developer', label: 'Developer', Icon: Code2 },
+  { id: 'Private', label: 'Private', Icon: Shield },
+];
+
 function StartMenu({ onLaunch }: { onLaunch: (app: ThanatosApp) => void }) {
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<AppCategory>('System');
-  const apps = appRegistry.filter((a) => a.category === category && `${a.name} ${a.description}`.toLowerCase().includes(query.toLowerCase()));
+  const [category, setCategory] = useState<AppCategory | 'All'>('All');
+
+  const filtered = appRegistry.filter((a) => {
+    const matchCat = category === 'All' || a.category === category;
+    const matchQ = query === '' || `${a.name} ${a.description}`.toLowerCase().includes(query.toLowerCase());
+    return matchCat && matchQ;
+  });
+
   return (
-    <motion.div className="start-menu" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 18 }}>
-      <div className="start-menu-title"><Skull size={25} /><strong>Death Console</strong></div>
-      <div className="search-row"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the underworld" autoFocus /></div>
-      <div className="category-tabs">{appCategories.map((cat) => <button key={cat} type="button" className={cat === category ? 'selected' : ''} onClick={() => setCategory(cat)}>{cat}</button>)}</div>
-      <div className="app-grid">{apps.map((app) => <button key={app.id} type="button" className="launcher-tile" onClick={() => onLaunch(app)}><app.icon size={23} /><span>{app.name}</span>{app.locked ? <Lock size={13} /> : null}</button>)}</div>
+    <motion.div
+      className="start-menu"
+      initial={{ opacity: 0, scale: 0.96, y: 14 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96, y: 14 }}
+      transition={{ duration: 0.16, ease: 'easeOut' }}
+    >
+      <div className="sm-header">
+        <div className="sm-logo">
+          <Skull size={18} />
+          <span>THANATOS OS</span>
+        </div>
+        <div className="sm-search-wrap">
+          <Search size={13} className="sm-search-icon" />
+          <input
+            className="sm-search-input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search applications..."
+            autoFocus
+          />
+          {query && (
+            <button type="button" className="sm-search-clear" onClick={() => setQuery('')}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="sm-body">
+        <nav className="sm-sidebar">
+          {SM_CATS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              className={clsx('sm-cat-btn', category === id && 'active')}
+              onClick={() => { setCategory(id); setQuery(''); }}
+            >
+              <Icon size={15} />
+              <span className="sm-cat-label">{label}</span>
+              {id !== 'All' && (
+                <span className="sm-cat-count">
+                  {appRegistry.filter((a) => a.category === id).length}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <div className="sm-content">
+          <div className="sm-section-label">
+            {query ? `Results for "${query}"` : category === 'All' ? 'All Applications' : category}
+            <span className="sm-count-chip">{filtered.length}</span>
+          </div>
+          {filtered.length === 0 ? (
+            <div className="sm-empty">No applications found</div>
+          ) : (
+            <div className="sm-app-grid">
+              {filtered.map((app) => (
+                <button
+                  key={app.id}
+                  type="button"
+                  className={clsx('sm-app-card', app.locked && 'locked')}
+                  onClick={() => onLaunch(app)}
+                >
+                  <div className="sm-app-icon">
+                    <app.icon size={19} />
+                  </div>
+                  <div className="sm-app-info">
+                    <div className="sm-app-name">
+                      {app.name}
+                      {app.locked && <Lock size={9} />}
+                    </div>
+                    <div className="sm-app-desc">{app.description}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </motion.div>
   );
 }
