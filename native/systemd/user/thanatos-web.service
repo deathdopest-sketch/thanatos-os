@@ -1,0 +1,15 @@
+[Unit]
+Description=Thanatos OS web desktop (Lilly) on localhost
+After=default.target
+
+[Service]
+Type=simple
+# Installers rewrite this path to the repo location.
+WorkingDirectory=%h/thanatos-os
+# Login shells pick up fnm/nvm-managed node.
+ExecStart=/bin/bash -lc 'exec npx vite preview --host 127.0.0.1 --port 4173 --strictPort'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

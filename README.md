@@ -32,6 +32,13 @@ Remote PC control should not expose raw ports directly to the public internet. T
 
 Adult/private applications must stay PIN-gated, local-first, and explicit-consent only. No underage, non-consensual, scraped, or covert media workflows belong in this OS.
 
-## Native Linux Track
+## Chromebook Setup
 
-The native OS direction lives in `native/` and is documented in `docs/native-thanatos-os.md`. It starts with Arch + Hyprland configs and a local allowlisted ingestion daemon. Build this track before adding deeper Ollama/Qdrant automation so the UI, storage boundaries, and daemon permissions are clear.
+To turn a Chromebook into a Lilly-themed dev workstation, with the desktop, toolchains, Vita and Reaper:
+
+```bash
+git clone https://github.com/deathdopest-sketch/thanatos-os.git ~/thanatos-os
+~/thanatos-os/native/install/crostini.sh
+```
+
+The installer runs inside ChromeOS's Linux environment. The web desktop installs as a fullscreen Chrome app. See [`native/README.md`](native/README.md) for the full guide, the `thanatos` command, and the native Arch + Hyprland track.

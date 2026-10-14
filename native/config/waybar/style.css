@@ -8,7 +8,7 @@
 
 window#waybar {
   background: rgba(5, 5, 8, 0.72);
-  border-bottom: 1px solid rgba(93, 255, 206, 0.22);
+  border-bottom: 1px solid rgba(255, 117, 206, 0.28);
   color: #eef8f2;
 }
 
@@ -36,8 +36,8 @@ window#waybar {
 }
 
 #workspaces button.active {
-  background: rgba(93, 255, 206, 0.18);
-  color: #5dffce;
+  background: rgba(255, 117, 206, 0.18);
+  color: #ff75ce;
 }
 
 #cpu.warning,

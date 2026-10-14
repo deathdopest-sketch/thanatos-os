@@ -1,0 +1,254 @@
+#!/usr/bin/env bash
+# thanatos: the Thanatos OS control command.
+set -euo pipefail
+
+THANATOS_HOME="${THANATOS_HOME:-$HOME/thanatos-os}"
+DATA="${THANATOS_DATA:-$HOME/.local/share/thanatos}"
+JOURNAL="$DATA/journal.md"
+LANG_DIR="$THANATOS_HOME/native/languages"
+WEB_PORT="${THANATOS_WEB_PORT:-4173}"
+
+pink=$'\e[38;2;255;117;206m'; violet=$'\e[38;2;165;107;255m'; mint=$'\e[38;2;93;255;206m'
+red=$'\e[38;2;255;47;109m'; dim=$'\e[2m'; off=$'\e[0m'
+[ -t 1 ] || { pink=; violet=; mint=; red=; dim=; off=; }
+
+say()  { printf '%s☠%s %s\n' "$pink" "$off" "$*"; }
+die()  { printf '%s✗%s %s\n' "$red" "$off" "$*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+${pink}thanatos${off} — Thanatos OS control
+
+  ${violet}doctor${off}                     check toolchains and setup
+  ${violet}lang list${off}                  list language plugins
+  ${violet}lang install <name|all>${off}    install a toolchain (node python rust go c vita reaper)
+  ${violet}web start|stop|status|open${off} run the Lilly desktop on localhost:$WEB_PORT
+  ${violet}new <kind> <name>${off}          scaffold a project (node python rust go c vita reaper)
+  ${violet}log [text]${off}                 add to your learning journal (no text: open in \$EDITOR)
+  ${violet}review [days]${off}              show recent journal entries (default 7)
+  ${violet}streak${off}                     consecutive days with a journal entry
+  ${violet}focus [minutes] [task]${off}     focus timer, logs the session when done (default 25)
+  ${violet}learn reaper${off}               open the Necronomicon (Reaper's learning system)
+EOF
+}
+
+# ---------- doctor ----------
+doctor() {
+  local ok=0 miss=0
+  check_cmd() {
+    local name=$1 cmd=$2 flag=${3:---version}
+    if command -v "$cmd" >/dev/null 2>&1; then
+      printf '  %s✓%s %-10s %s\n' "$mint" "$off" "$name" "$("$cmd" "$flag" 2>&1 | head -1)"
+      ok=$((ok + 1))
+    else
+      printf '  %s✗%s %-10s %smissing%s\n' "$red" "$off" "$name" "$dim" "$off"
+      miss=$((miss + 1))
+    fi
+  }
+  say "toolchains"
+  check_cmd git git; check_cmd node node; check_cmd python python3; check_cmd uv uv
+  check_cmd rust cargo; check_cmd go go version; check_cmd gcc gcc; check_cmd vita vita; check_cmd reaper reaper
+  say "workflow"
+  check_cmd tmux tmux -V; check_cmd nvim nvim; check_cmd ripgrep rg; check_cmd fzf fzf
+  check_cmd starship starship; check_cmd gh gh
+  say "setup"
+  [ -d "$THANATOS_HOME/.git" ] && printf '  %s✓%s repo       %s\n' "$mint" "$off" "$THANATOS_HOME" \
+    || printf '  %s✗%s repo       not at %s (set THANATOS_HOME)\n' "$red" "$off" "$THANATOS_HOME"
+  if git config --global user.email >/dev/null; then
+    printf '  %s✓%s git user   %s\n' "$mint" "$off" "$(git config --global user.name) <$(git config --global user.email)>"
+  else
+    printf '  %s✗%s git user   run: git config --global user.name/user.email\n' "$red" "$off"
+  fi
+  [ -f "$HOME/.ssh/id_ed25519.pub" ] && printf '  %s✓%s ssh key\n' "$mint" "$off" \
+    || printf '  %s✗%s ssh key    run: ssh-keygen -t ed25519\n' "$red" "$off"
+  printf '\n%s%d ok, %d missing%s\n' "$dim" "$ok" "$miss" "$off"
+}
+
+# ---------- lang ----------
+load_plugin() {
+  local file="$LANG_DIR/$1.sh"
+  [ -f "$file" ] || die "no plugin '$1' (see: thanatos lang list)"
+  unset -f describe check install 2>/dev/null || true
+  # shellcheck source=/dev/null
+  . "$LANG_DIR/_git.sh"
+  # shellcheck source=/dev/null
+  . "$file"
+}
+
+plugins() { for f in "$LANG_DIR"/[!_]*.sh; do basename "$f" .sh; done; }
+
+lang() {
+  case "${1:-list}" in
+    list)
+      for p in $(plugins); do
+        ( load_plugin "$p"
+          if check >/dev/null 2>&1; then mark="$mint✓$off"; else mark="$dim·$off"; fi
+          printf '  %s %-8s %s\n' "$mark" "$p" "$(describe)" )
+      done ;;
+    install)
+      local target=${2:-}; [ -n "$target" ] || die "usage: thanatos lang install <name|all>"
+      local list; if [ "$target" = all ]; then list=$(plugins); else list=$target; fi
+      for p in $list; do
+        say "installing $p"
+        ( load_plugin "$p"; install ) || die "$p failed"
+      done
+      say "done. open a new shell (or: source ~/.bashrc) to pick up PATH changes" ;;
+    *) die "usage: thanatos lang list | install <name|all>" ;;
+  esac
+}
+
+# ---------- web ----------
+web() {
+  local unit=thanatos-web.service
+  have_unit() { systemctl --user cat "$unit" >/dev/null 2>&1; }
+  case "${1:-status}" in
+    start)
+      if have_unit; then systemctl --user start "$unit"
+      else
+        [ -d "$THANATOS_HOME/dist" ] || (cd "$THANATOS_HOME" && npm run build)
+        mkdir -p "$DATA"
+        # setsid: own process group, so stop can kill npx and the node child together.
+        # The child records its own pid: setsid may fork, so $! isn't the group leader.
+        (cd "$THANATOS_HOME" && setsid bash -c 'echo $$ > "$1"; exec npx vite preview --host 127.0.0.1 --port "$2" --strictPort' \
+          _ "$DATA/web.pid" "$WEB_PORT" >"$DATA/web.log" 2>&1 < /dev/null &)
+      fi
+      say "desktop at http://localhost:$WEB_PORT" ;;
+    stop)
+      if have_unit; then systemctl --user stop "$unit"
+      elif [ -f "$DATA/web.pid" ]; then kill -TERM -- "-$(cat "$DATA/web.pid")" 2>/dev/null || true; rm -f "$DATA/web.pid"; fi
+      say "desktop stopped" ;;
+    status)
+      if curl -fsS -o /dev/null "http://127.0.0.1:$WEB_PORT/"; then say "running on http://localhost:$WEB_PORT"
+      else say "not running (thanatos web start)"; fi ;;
+    open)
+      web start >/dev/null
+      if command -v garcon-url-handler >/dev/null; then garcon-url-handler "http://localhost:$WEB_PORT"
+      else xdg-open "http://localhost:$WEB_PORT" >/dev/null 2>&1 || say "open http://localhost:$WEB_PORT"; fi ;;
+    *) die "usage: thanatos web start|stop|status|open" ;;
+  esac
+}
+
+# ---------- new ----------
+new_project() {
+  local kind=${1:-} name=${2:-}
+  [ -n "$kind" ] && [ -n "$name" ] || die "usage: thanatos new <node|python|rust|go|c|vita|reaper> <name>"
+  [ -e "$name" ] && die "'$name' already exists"
+  case "$kind" in
+    rust) cargo new --quiet "$name" ;;
+    go) mkdir "$name" && (cd "$name" && go mod init "$name" >/dev/null 2>&1 && cat > main.go <<'EOF'
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("risen")
+}
+EOF
+      cat > main_test.go <<'EOF'
+package main
+
+import "testing"
+
+func TestTruth(t *testing.T) {
+	if 1+1 != 2 {
+		t.Fatal("arithmetic is dead")
+	}
+}
+EOF
+    ) ;;
+    python) mkdir "$name" && (cd "$name" && if command -v uv >/dev/null; then uv init --quiet --package . && uv add --quiet --dev pytest ruff; else
+      mkdir -p src tests && echo 'def main() -> None:
+    print("risen")' > src/main.py; fi
+      mkdir -p tests && printf 'def test_truth():\n    assert 1 + 1 == 2\n' > tests/test_truth.py) ;;
+    node) mkdir "$name" && (cd "$name" && npm init -y >/dev/null && npm pkg set type=module scripts.test="node --test" scripts.start="node index.js" >/dev/null \
+      && echo 'console.log("risen");' > index.js \
+      && printf "import test from 'node:test';\nimport assert from 'node:assert/strict';\n\ntest('truth', () => assert.equal(1 + 1, 2));\n" > index.test.js) ;;
+    c) mkdir "$name" && (cd "$name" && printf '#include <stdio.h>\n\nint main(void) {\n    puts("risen");\n    return 0;\n}\n' > main.c \
+      && printf 'CFLAGS ?= -Wall -Wextra -Werror -g -fsanitize=address,undefined\n\n%s: main.c\n\t$(CC) $(CFLAGS) -o $@ $<\n\nrun: %s\n\t./%s\n\nclean:\n\trm -f %s\n\n.PHONY: run clean\n' "$name" "$name" "$name" "$name" > Makefile) ;;
+    vita) mkdir "$name" && printf '// %s\nbirth dna greeting = "Hello from %s";\nbreathe greeting;\n' "$name" "$name" > "$name/main.vita" ;;
+    reaper) mkdir "$name" && printf '# %s\nsoul greeting = "Hello from %s";\nharvest greeting;\n' "$name" "$name" > "$name/main.reaper" ;;
+    *) die "unknown kind '$kind' (node python rust go c vita reaper)" ;;
+  esac
+  [ -d "$name/.git" ] || git -C "$name" init --quiet
+  [ -f "$name/README.md" ] || printf '# %s\n\nWhat this is, how to run it, what I learned building it.\n' "$name" > "$name/README.md"
+  say "created $kind project ./$name"
+  journal_add "started $kind project: $name"
+}
+
+# ---------- journal ----------
+journal_add() {
+  mkdir -p "$DATA"
+  local today; today=$(date +%F)
+  grep -q "^## $today" "$JOURNAL" 2>/dev/null || printf '\n## %s\n' "$today" >> "$JOURNAL"
+  printf -- '- %s %s\n' "$(date +%H:%M)" "$*" >> "$JOURNAL"
+}
+
+log_cmd() {
+  if [ $# -gt 0 ]; then journal_add "$*"; say "logged"
+  else mkdir -p "$DATA"; journal_add "(entry)"; "${EDITOR:-nano}" "$JOURNAL"; fi
+}
+
+review() {
+  local days=${1:-7} since
+  [ -f "$JOURNAL" ] || die "journal is empty (thanatos log \"what I learned\")"
+  since=$(date -d "-$days days" +%F)
+  awk -v since="$since" '/^## /{show = ($2 >= since)} show' "$JOURNAL"
+}
+
+streak() {
+  local n=0 d
+  [ -f "$JOURNAL" ] || { say "streak: 0 day(s)"; return; }
+  d=$(date +%F)
+  grep -q "^## $d" "$JOURNAL" || d=$(date -d yesterday +%F)
+  while grep -q "^## $d" "$JOURNAL"; do n=$((n + 1)); d=$(date -d "$d -1 day" +%F); done
+  say "streak: $n day(s)"
+}
+
+nudge() {
+  # Called from the shell rc: at most one reminder per day.
+  local stamp="$DATA/.nudged" today; today=$(date +%F)
+  [ "$(cat "$stamp" 2>/dev/null)" = "$today" ] && return 0
+  mkdir -p "$DATA"; echo "$today" > "$stamp"
+  grep -q "^## $today" "$JOURNAL" 2>/dev/null && return 0
+  printf '%s☠ nothing in the journal today. thanatos log "what I learned"%s\n' "$dim" "$off"
+}
+
+focus() {
+  local mins=${1:-25}; shift || true
+  local task=${*:-focus}
+  [[ "$mins" =~ ^[0-9]+$ ]] || die "usage: thanatos focus [minutes] [task]"
+  say "focusing on '$task' for $mins min (ctrl-c to abandon)"
+  local end=$(( $(date +%s) + mins * 60 ))
+  while [ "$(date +%s)" -lt "$end" ]; do
+    local left=$(( end - $(date +%s) ))
+    printf '\r  %s%02d:%02d%s ' "$violet" $((left / 60)) $((left % 60)) "$off"
+    sleep 1
+  done
+  printf '\r'
+  command -v notify-send >/dev/null && notify-send "Thanatos" "$task: time's up" || printf '\a'
+  journal_add "focus ${mins}m: $task"
+  say "done. logged ${mins}m on '$task'"
+}
+
+learn() {
+  case "${1:-}" in
+    reaper) command -v reaper >/dev/null || die "install first: thanatos lang install reaper"; exec reaper --necronomicon ;;
+    *) die "usage: thanatos learn reaper" ;;
+  esac
+}
+
+cmd=${1:-help}; shift || true
+case "$cmd" in
+  doctor) doctor ;;
+  lang) lang "$@" ;;
+  web) web "$@" ;;
+  new) new_project "$@" ;;
+  log) log_cmd "$@" ;;
+  review) review "$@" ;;
+  streak) streak ;;
+  focus) focus "$@" ;;
+  learn) learn "$@" ;;
+  nudge) nudge ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac
