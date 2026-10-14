@@ -1,8 +1,8 @@
 # REAPER: the undead programming language (github.com/deathdopest-sketch/Reaper-Scythe).
 REAPER_DIR="$THANATOS_LANGS/reaper"
 REAPER_URL="${REAPER_URL:-https://github.com/deathdopest-sketch/Reaper-Scythe.git}"
-# Fix branch until Reaper-Scythe PR #1 merges; falls back to the default branch once it's gone.
-REAPER_REF="${REAPER_REF:-claude/eager-einstein-lqjohr}"
+# Empty = the repo's default branch; set REAPER_REF to pin a branch.
+REAPER_REF="${REAPER_REF:-}"
 
 describe() { echo "REAPER language: reaper <file>.reaper, reaper (REPL), reaper --necronomicon"; }
 check() { command -v reaper >/dev/null && reaper --version >/dev/null 2>&1; }

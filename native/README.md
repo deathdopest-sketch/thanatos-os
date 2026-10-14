@@ -66,7 +66,7 @@ thanatos learn reaper               Reaper's Necronomicon learning system
 
 - Each language installs to `~/.local/share/thanatos/langs/<name>` with its own Python venv. The `vita`, `vita-repl` and `reaper` commands go in `~/.local/bin`.
 - `thanatos lang install vita` (or `reaper`) again pulls the latest commit.
-- Until the fix PRs merge, the installers check out the `claude/eager-einstein-lqjohr` branch. Once that branch is deleted they fall back to `main` automatically.
+- To pin a branch, set `VITA_REF=<branch>` or `REAPER_REF=<branch>` before installing.
 - Starter projects: `thanatos new vita my-organism` and `thanatos new reaper my-ritual`.
 
 ## Arch + Hyprland track

@@ -22,7 +22,5 @@ Both are Python interpreters installed from their repos into
 and `reaper` wrappers in `~/.local/bin`.
 
 - Vita-Bio is private: run `gh auth login` first.
-- Until the fix PRs merge, the plugins check out the `claude/eager-einstein-lqjohr`
-  branch, and fall back to `main` once that branch is deleted. Override with
-  `VITA_REF=main` / `REAPER_REF=main`.
+- They track each repo's default branch. Pin one with `VITA_REF=<branch>` / `REAPER_REF=<branch>`.
 - Re-running `thanatos lang install vita` updates to the latest commit.
