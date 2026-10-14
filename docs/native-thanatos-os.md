@@ -39,4 +39,4 @@ flowchart TD
 
 ## Chromebook Notes
 
-Use the native track only on a Chromebook model that supports your chosen Linux install path. For early development, test in a VM or spare machine first. Keep the web shell as the safe prototype while native configs mature.
+Start with the Crostini track (`native/install/crostini.sh`). It keeps ChromeOS, and the web desktop runs as an installed fullscreen app. Use the Arch + Hyprland track only on a Chromebook whose board MrChromebox supports with UEFI firmware, and keep a recovery USB. ARM Chromebooks should stay on Crostini. Setup steps are in `native/README.md`.

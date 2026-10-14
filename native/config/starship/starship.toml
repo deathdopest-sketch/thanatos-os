@@ -1,0 +1,41 @@
+# Thanatos / Lilly prompt
+format = """
+[╭─](#a56bff)$username[@](#a56bff)$hostname $directory$git_branch$git_status$nodejs$python$rust$golang$cmd_duration
+[╰─☠](#ff75ce) """
+add_newline = true
+
+[username]
+show_always = true
+style_user = "bold #ff75ce"
+format = "[$user]($style)"
+
+[hostname]
+ssh_only = false
+style = "bold #a56bff"
+format = "[$hostname]($style)"
+
+[directory]
+style = "bold #5dffce"
+truncation_length = 4
+truncate_to_repo = true
+
+[git_branch]
+symbol = " "
+style = "#ff75ce"
+
+[git_status]
+style = "#ff2f6d"
+
+[cmd_duration]
+min_time = 2000
+style = "#9ea9a4"
+format = " [took $duration]($style)"
+
+[nodejs]
+style = "#5dffce"
+[python]
+style = "#ffd166"
+[rust]
+style = "#ff8a2a"
+[golang]
+style = "#5dffce"
