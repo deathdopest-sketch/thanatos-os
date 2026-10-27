@@ -28,7 +28,9 @@ import {
   CloudSun,
   Code2,
   Copy,
+  DoorOpen,
   Eraser,
+  ExternalLink,
   Eye,
   File,
   FilePlus2,
@@ -50,6 +52,7 @@ import {
   Music,
   Network,
   Paintbrush,
+  Plus,
   Play,
   QrCode,
   RadioTower,
@@ -57,11 +60,13 @@ import {
   Save,
   Search,
   Send,
+  Settings,
   Shield,
   ShieldCheck,
   Shuffle,
   Skull,
   Square,
+  Trash2,
   Wand2,
   Wifi,
   X
@@ -2148,9 +2153,20 @@ function RemoteControlApp() {
   );
 }
 
-// ─── mumble chat ──────────────────────────────────────────────────────────────
+// ─── chat sites ───────────────────────────────────────────────────────────────
 
-function MumbleChatApp() {
+const ROTVICE_ORIGIN = 'https://mumblechat.online';
+const ROTVICE_URL = `${ROTVICE_ORIGIN}/rotvice`;
+const STUMBLECHAT_URL = 'https://stumblechat.com';
+const CHATCOMMON_URL = 'https://chatcommon.com';
+
+// Third-party chat sites run in their own browser window: you sign in there as
+// yourself, and their anti-bot checks see a normal browser session.
+function openChatWindow(url: string) {
+  window.open(url, '_blank', 'popup,width=1240,height=820,noopener,noreferrer');
+}
+
+function RotViceApp() {
   const [frameKey, setFrameKey] = useState(0);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [stats, setStats] = useState<MumbleChatStats>({
@@ -2161,7 +2177,7 @@ function MumbleChatApp() {
 
   useEffect(() => {
     const h = (e: MessageEvent) => {
-      if (e.origin !== 'https://mumblechat.online') return;
+      if (e.origin !== ROTVICE_ORIGIN) return;
       const p = e.data as MumbleChatPayload;
       if (p.type !== 'mumblechat:stats') return;
       setStats({
@@ -2185,38 +2201,177 @@ function MumbleChatApp() {
 
   const requestStats = useCallback(() => {
     setStats((s) => ({ ...s, status: 'checking', message: frameLoaded ? 'Requesting stats...' : 'Waiting for frame...' }));
-    const frame = document.querySelector<HTMLIFrameElement>('#mumblechat-frame');
-    frame?.contentWindow?.postMessage({ type: 'thanatos:request-stats' }, 'https://mumblechat.online');
-    window.setTimeout(() => setStats((s) => s.status !== 'checking' ? s : { ...s, status: 'blocked', lastUpdated: new Date().toLocaleTimeString(), message: 'No response from MumbleChat.' }), 1800);
+    const frame = document.querySelector<HTMLIFrameElement>('#rotvice-frame');
+    frame?.contentWindow?.postMessage({ type: 'thanatos:request-stats' }, ROTVICE_ORIGIN);
+    window.setTimeout(() => setStats((s) => s.status !== 'checking' ? s : { ...s, status: 'blocked', lastUpdated: new Date().toLocaleTimeString(), message: 'No response from RotVice.' }), 1800);
   }, [frameLoaded]);
 
   useEffect(() => { const p = window.setInterval(requestStats, 30_000); return () => window.clearInterval(p); }, [frameKey, requestStats]);
 
   return (
-    <div className="mumblechat-app">
-      <div className="mumblechat-toolbar">
+    <div className="chat-app">
+      <div className="chat-toolbar">
         <button type="button" onClick={requestStats}><RefreshCcw size={15} /> Stats</button>
         <button type="button" onClick={() => { setFrameLoaded(false); setFrameKey((k) => k + 1); }}><RefreshCcw size={15} /> Reload</button>
-        <a href="https://mumblechat.online" target="_blank" rel="noreferrer"><Globe size={15} /> Open</a>
+        <a href={ROTVICE_URL} target="_blank" rel="noreferrer"><Globe size={15} /> Open</a>
       </div>
-      <div className="mumblechat-layout">
-        <iframe key={frameKey} id="mumblechat-frame" title="MumbleChat" src="https://mumblechat.online" referrerPolicy="no-referrer" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox" onLoad={() => { setFrameLoaded(true); window.setTimeout(requestStats, 900); }} />
-        <aside className="mumblechat-stats">
+      <div className="chat-layout stats-open">
+        <iframe key={frameKey} id="rotvice-frame" title="RotVice" src={ROTVICE_URL} referrerPolicy="no-referrer" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox" onLoad={() => { setFrameLoaded(true); window.setTimeout(requestStats, 900); }} />
+        <aside className="chat-stats">
           <h3>Live Stats</h3>
           <div className={`status-orb ${stats.status}`} />
-          <div className="mumblechat-profile">
+          <div className="chat-profile">
             {stats.avatarUrl ? <img src={stats.avatarUrl} alt="" referrerPolicy="no-referrer" /> : <div>{(stats.displayName ?? stats.username ?? '?').slice(0, 1)}</div>}
             <span>{stats.displayName ?? stats.username ?? 'Unknown'}</span>
           </div>
           <dl>
             <dt>Login</dt><dd>{stats.loggedIn === null ? 'unknown' : stats.loggedIn ? 'logged in' : 'logged out'}</dd>
             <dt>Username</dt><dd>{stats.username ?? 'unknown'}</dd>
-            <dt>Unread PMs</dt><dd>{stats.unreadPms ?? 'unknown'}</dd>
+            <dt>Unread DMs</dt><dd>{stats.unreadPms ?? 'unknown'}</dd>
             <dt>Online Friends</dt><dd>{stats.onlineFriends.length ? stats.onlineFriends.join(', ') : 'none'}</dd>
             <dt>Updated</dt><dd>{stats.lastUpdated ?? 'never'}</dd>
           </dl>
           <p>{stats.message}</p>
         </aside>
+      </div>
+    </div>
+  );
+}
+
+type StumbleRole = 'owner' | 'supermod' | 'mod' | 'member';
+type StumbleRoom = { id: string; slug: string; role: StumbleRole };
+type StumbleSettings = { username: string; rooms: StumbleRoom[] };
+
+const STUMBLE_SETTINGS_KEY = 'thanatos.stumblechat';
+const STUMBLE_ROLES: { id: StumbleRole; label: string; tools: string }[] = [
+  { id: 'owner', label: 'Owner', tools: 'Automod actions and autobans (coming next).' },
+  { id: 'supermod', label: 'Super mod', tools: 'Automod actions and autobans (coming next).' },
+  { id: 'mod', label: 'Mod', tools: 'Basic mod toolkit (coming next).' },
+  { id: 'member', label: 'Member', tools: 'Room shortcut only.' }
+];
+
+function loadStumbleSettings(): StumbleSettings {
+  try {
+    const parsed = JSON.parse(readStoredValue(STUMBLE_SETTINGS_KEY) ?? '') as Partial<StumbleSettings>;
+    const rooms = Array.isArray(parsed.rooms)
+      ? parsed.rooms.filter((r): r is StumbleRoom => typeof r?.slug === 'string' && STUMBLE_ROLES.some((role) => role.id === r.role))
+      : [];
+    return { username: typeof parsed.username === 'string' ? parsed.username : '', rooms };
+  } catch {
+    return { username: '', rooms: [] };
+  }
+}
+
+// Accepts a bare room name or a pasted room link (stumblechat.com/room/<name>).
+function stumbleRoomSlug(input: string) {
+  const trimmed = input.trim();
+  const fromLink = trimmed.match(/stumblechat\.com\/room\/([^/?#\s]+)/i);
+  return (fromLink ? decodeURIComponent(fromLink[1]) : trimmed).replace(/^\/+|\/+$/g, '');
+}
+
+const stumbleRoomUrl = (slug: string) => `${STUMBLECHAT_URL}/room/${encodeURIComponent(slug)}`;
+
+function StumbleChatApp() {
+  const [tab, setTab] = useState<'rooms' | 'settings'>('rooms');
+  const [settings, setSettings] = useState<StumbleSettings>(loadStumbleSettings);
+  const [roomInput, setRoomInput] = useState('');
+  const [roleInput, setRoleInput] = useState<StumbleRole>('member');
+
+  const save = (next: StumbleSettings) => {
+    setSettings(next);
+    writeStoredValue(STUMBLE_SETTINGS_KEY, JSON.stringify(next));
+  };
+
+  const addRoom = () => {
+    const slug = stumbleRoomSlug(roomInput);
+    if (!slug || settings.rooms.some((r) => r.slug.toLowerCase() === slug.toLowerCase())) return;
+    save({ ...settings, rooms: [...settings.rooms, { id: crypto.randomUUID(), slug, role: roleInput }] });
+    setRoomInput('');
+  };
+
+  const roleLabel = (role: StumbleRole) => STUMBLE_ROLES.find((r) => r.id === role)?.label ?? role;
+
+  return (
+    <div className="chat-app">
+      <div className="chat-toolbar">
+        <button type="button" className={tab === 'rooms' ? 'primary-action' : ''} onClick={() => setTab('rooms')}><DoorOpen size={15} /> Rooms</button>
+        <button type="button" className={tab === 'settings' ? 'primary-action' : ''} onClick={() => setTab('settings')}><Settings size={15} /> Settings</button>
+        <button type="button" onClick={() => openChatWindow(STUMBLECHAT_URL)}><ExternalLink size={15} /> Open StumbleChat</button>
+      </div>
+
+      {tab === 'rooms' ? (
+        <div className="chat-panel">
+          <p className="chat-hint">
+            {settings.username ? <>Account: <strong>{settings.username}</strong>. </> : null}
+            Rooms open in their own window. Sign in there yourself; Thanatos never sees your password.
+          </p>
+          {settings.rooms.length === 0 ? (
+            <div className="chat-empty">
+              <p>No rooms yet.</p>
+              <button type="button" onClick={() => setTab('settings')}><Plus size={15} /> Add a room</button>
+            </div>
+          ) : (
+            <ul className="chat-room-list">
+              {settings.rooms.map((room) => (
+                <li key={room.id}>
+                  <div>
+                    <strong>{room.slug}</strong>
+                    <span className={`chat-role ${room.role}`}>{roleLabel(room.role)}</span>
+                  </div>
+                  <button type="button" onClick={() => openChatWindow(stumbleRoomUrl(room.slug))}><ExternalLink size={15} /> Open</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <div className="chat-panel">
+          <section className="chat-settings-section">
+            <h3>Account</h3>
+            <label>
+              StumbleChat username
+              <input value={settings.username} onChange={(e) => save({ ...settings, username: e.target.value })} placeholder="your username" />
+            </label>
+            <p className="chat-hint">Only the name is saved, on this device. Log in on StumbleChat itself.</p>
+          </section>
+
+          <section className="chat-settings-section">
+            <h3>Rooms</h3>
+            <div className="chat-room-form">
+              <input value={roomInput} onChange={(e) => setRoomInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addRoom(); }} placeholder="room name or stumblechat.com/room/… link" />
+              <select value={roleInput} onChange={(e) => setRoleInput(e.target.value as StumbleRole)}>
+                {STUMBLE_ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+              <button type="button" onClick={addRoom}><Plus size={15} /> Add</button>
+            </div>
+            <ul className="chat-room-list">
+              {settings.rooms.map((room) => (
+                <li key={room.id}>
+                  <div>
+                    <strong>{room.slug}</strong>
+                    <small>{STUMBLE_ROLES.find((r) => r.id === room.role)?.tools}</small>
+                  </div>
+                  <select value={room.role} aria-label={`Role in ${room.slug}`} onChange={(e) => save({ ...settings, rooms: settings.rooms.map((r) => r.id === room.id ? { ...r, role: e.target.value as StumbleRole } : r) })}>
+                    {STUMBLE_ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                  </select>
+                  <button type="button" aria-label={`Remove ${room.slug}`} onClick={() => save({ ...settings, rooms: settings.rooms.filter((r) => r.id !== room.id) })}><Trash2 size={15} /></button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatCommonApp() {
+  return (
+    <div className="chat-app">
+      <div className="chat-panel chat-launch">
+        <h3>ChatCommon</h3>
+        <p className="chat-hint">Opens chatcommon.com in its own window. Sign in there as yourself.</p>
+        <button type="button" className="primary-action" onClick={() => openChatWindow(CHATCOMMON_URL)}><ExternalLink size={15} /> Open ChatCommon</button>
       </div>
     </div>
   );
@@ -2307,7 +2462,9 @@ function AppContent({ app, openWindows, theme, session, onSessionChange, onTheme
     case 'terminal': return <TerminalApp openWindows={openWindows} session={session} onSessionChange={onSessionChange} />;
     case 'files': return <FileManagerApp />;
     case 'mail': return <MailApp />;
-    case 'mumblechat': return <MumbleChatApp />;
+    case 'rotvice': return <RotViceApp />;
+    case 'stumblechat': return <StumbleChatApp />;
+    case 'chatcommon': return <ChatCommonApp />;
     case 'settings': return <SettingsApp theme={theme} onThemeChange={onThemeChange} />;
     case 'tasks': return <TaskManagerApp openWindows={openWindows} />;
     case 'clock': return <ClockApp />;
@@ -2491,7 +2648,7 @@ function StartMenu({ onLaunch }: { onLaunch: (app: ThanatosApp) => void }) {
 // ─── main desktop ─────────────────────────────────────────────────────────────
 
 function getDefaultWindowSize(appId: string) {
-  if (appId === 'mumblechat') return { width: Math.min(1160, window.innerWidth - 48), height: Math.min(760, window.innerHeight - 112), maximized: true };
+  if (appId === 'rotvice') return { width: Math.min(1160, window.innerWidth - 48), height: Math.min(760, window.innerHeight - 112), maximized: true };
   if (appId === 'visualizer') return { width: 760, height: 720, maximized: false };
   if (appId === 'music') return { width: 760, height: 620, maximized: false };
   if (appId === 'passwords') return { width: 900, height: 680, maximized: false };
@@ -2536,8 +2693,8 @@ export function ThanatosDesktop() {
       const defaults = getDefaultWindowSize(app.id);
       const defaultWidth = saved?.width ?? defaults.width;
       const defaultHeight = saved?.height ?? defaults.height;
-      const defaultX = saved?.x ?? (app.id === 'mumblechat' ? Math.max(18, (window.innerWidth - defaultWidth) / 2) : 58 + (placementSeed % 7) * 28);
-      const defaultY = saved?.y ?? (app.id === 'mumblechat' ? 18 : 44 + (placementSeed % 5) * 24);
+      const defaultX = saved?.x ?? (app.id === 'rotvice' ? Math.max(18, (window.innerWidth - defaultWidth) / 2) : 58 + (placementSeed % 7) * 28);
+      const defaultY = saved?.y ?? (app.id === 'rotvice' ? 18 : 44 + (placementSeed % 5) * 24);
       return [...ws, {
         id,
         app,

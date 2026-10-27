@@ -29,6 +29,7 @@ import {
   ListChecks,
   Mail,
   MessageCircle,
+  MessagesSquare,
   MonitorDot,
   Music,
   Network,
@@ -50,6 +51,7 @@ import {
   Usb,
   Video,
   Wand2,
+  Webcam,
   Wifi
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -76,7 +78,9 @@ export const appRegistry: ThanatosApp[] = [
   { id: 'calendar', name: 'Calendar', category: 'System', icon: CalendarDays, description: 'Schedule and event dashboard.' },
   { id: 'weather', name: 'Weather', category: 'System', icon: CloudSun, description: 'Real-time weather via Open-Meteo.' },
   { id: 'mail', name: 'Email', category: 'System', icon: Mail, description: 'Mailbox shell for future provider adapters.' },
-  { id: 'mumblechat', name: 'MumbleChat', category: 'System', icon: MessageCircle, description: 'MumbleChat integration with live account stats.' },
+  { id: 'rotvice', name: 'RotVice', category: 'System', icon: MessageCircle, description: 'RotVice pet chat with live account stats.' },
+  { id: 'stumblechat', name: 'StumbleChat', category: 'System', icon: Webcam, description: 'Your StumbleChat rooms and roles.' },
+  { id: 'chatcommon', name: 'ChatCommon', category: 'System', icon: MessagesSquare, description: 'Opens ChatCommon in its own window.' },
   { id: 'writer', name: 'Rich Text', category: 'Media', icon: NotebookPen, description: 'Rich document editing.' },
   { id: 'markdown', name: 'Markdown', category: 'Media', icon: Text, description: 'Split-pane Markdown editor.' },
   { id: 'pdf', name: 'PDF Viewer', category: 'Media', icon: FileText, description: 'PDF reading via local file.' },
