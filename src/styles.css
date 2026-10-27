@@ -4371,3 +4371,319 @@ body {
   .death-brand { display: none; }
   .desktop-window { max-width: calc(100vw - 20px); }
 }
+
+/* ─── chat apps (RotVice, StumbleChat, ChatCommon) ─── */
+.chat-app {
+  position: relative;
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.chat-toolbar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.chat-toolbar button,
+.chat-toolbar a {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 47, 88, 0.28);
+  border-radius: 7px;
+  background: linear-gradient(180deg, rgba(100, 0, 18, 0.55), rgba(18, 5, 7, 0.82));
+  color: #fff4ec;
+  text-decoration: none;
+}
+
+.chat-toolbar .primary-action {
+  border-color: rgba(255, 28, 62, 0.7);
+  background: linear-gradient(180deg, rgba(255, 0, 50, 0.44), rgba(52, 0, 12, 0.9));
+  box-shadow: 0 0 18px rgba(255, 0, 50, 0.2), inset 0 0 14px rgba(255, 255, 255, 0.06);
+}
+
+
+
+
+
+.chat-layout {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.chat-layout.stats-open {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+}
+
+
+.chat-layout iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid rgba(255, 47, 88, 0.24);
+  border-radius: 7px;
+  background: #050203;
+}
+
+
+.chat-stats {
+  position: relative;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(255, 47, 88, 0.24);
+  border-radius: 7px;
+  background: rgba(3, 2, 3, 0.72);
+}
+
+.chat-stats h3 {
+  margin: 0 0 12px;
+  color: #ff315e;
+}
+
+.chat-profile {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 9px;
+  border: 1px solid rgba(255, 47, 88, 0.18);
+  border-radius: 7px;
+  background: rgba(255, 0, 48, 0.06);
+}
+
+.chat-profile img,
+.chat-profile div {
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 47, 88, 0.34);
+  border-radius: 7px;
+}
+
+.chat-profile img {
+  object-fit: cover;
+}
+
+.chat-profile div {
+  display: grid;
+  place-items: center;
+  color: #ff315e;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+}
+
+.chat-profile span {
+  overflow: hidden;
+  color: #fff4ec;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-stats dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  margin: 0;
+}
+
+.chat-stats dt {
+  color: #c7a45e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.chat-stats dd {
+  margin: 0 0 9px;
+  color: #fff4ec;
+}
+
+.chat-stats p,
+.chat-stats code {
+  display: block;
+  margin: 12px 0 0;
+  color: #c6b7aa;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.status-orb {
+  position: absolute;
+  right: 14px;
+  top: 16px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6c6470;
+  box-shadow: 0 0 16px rgba(108, 100, 112, 0.5);
+}
+
+.status-orb.checking {
+  background: #c7a45e;
+  box-shadow: 0 0 18px rgba(199, 164, 94, 0.78);
+}
+
+.status-orb.online {
+  background: #5effa4;
+  box-shadow: 0 0 18px rgba(94, 255, 164, 0.78);
+}
+
+.status-orb.unavailable,
+.status-orb.blocked {
+  background: #ff315e;
+  box-shadow: 0 0 18px rgba(255, 49, 94, 0.78);
+}
+
+
+.chat-toolbar button.primary-action,
+.chat-launch .primary-action {
+  border-color: rgba(255, 28, 62, 0.7);
+  background: linear-gradient(180deg, rgba(255, 0, 50, 0.44), rgba(52, 0, 12, 0.9));
+}
+
+.chat-panel {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 14px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(255, 47, 88, 0.24);
+  border-radius: 7px;
+  background: rgba(3, 2, 3, 0.72);
+}
+
+.chat-panel h3 {
+  margin: 0 0 8px;
+  color: #ff315e;
+}
+
+.chat-hint {
+  margin: 0;
+  color: #c6b7aa;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.chat-hint strong {
+  color: #fff4ec;
+}
+
+.chat-empty,
+.chat-launch {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.chat-panel button,
+.chat-panel input,
+.chat-panel select {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 47, 88, 0.28);
+  border-radius: 7px;
+  background: rgba(18, 5, 7, 0.82);
+  color: #fff4ec;
+  font: inherit;
+}
+
+.chat-panel button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.chat-settings-section label {
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  color: #c7a45e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.chat-settings-section label input {
+  font-family: inherit;
+  text-transform: none;
+}
+
+.chat-settings-section .chat-hint {
+  margin-top: 6px;
+}
+
+.chat-room-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.chat-room-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-room-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 47, 88, 0.18);
+  border-radius: 7px;
+  background: rgba(255, 0, 48, 0.06);
+}
+
+.chat-room-list li > div {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+}
+
+.chat-room-list strong {
+  overflow: hidden;
+  color: #fff4ec;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-room-list small {
+  color: #c6b7aa;
+}
+
+.chat-role {
+  width: fit-content;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(108, 100, 112, 0.3);
+  color: #c6b7aa;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.chat-role.owner { background: rgba(255, 49, 94, 0.28); color: #ff9db3; }
+.chat-role.supermod { background: rgba(199, 164, 94, 0.25); color: #e6c98c; }
+.chat-role.mod { background: rgba(94, 255, 164, 0.16); color: #8dffc2; }
+
+@media (max-width: 640px) {
+  .chat-layout.stats-open { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(320px, 1fr) auto; }
+  .chat-room-form { grid-template-columns: minmax(0, 1fr); }
+}
