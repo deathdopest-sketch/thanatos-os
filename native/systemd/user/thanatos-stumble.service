@@ -1,0 +1,16 @@
+[Unit]
+Description=Thanatos StumbleChat bridge (opens its Chrome window when the desktop asks)
+After=default.target sommelier@0.service sommelier-x@0.service
+
+[Service]
+Type=simple
+# Installers rewrite this path to the repo location.
+WorkingDirectory=%h/thanatos-os/native/stumble-bridge
+# Login shell for fnm-managed node. Chrome needs the display; these are
+# Crostini's defaults when the session doesn't already provide them.
+ExecStart=/bin/bash -lc 'export DISPLAY="$${DISPLAY:-:0}" WAYLAND_DISPLAY="$${WAYLAND_DISPLAY:-wayland-0}"; exec node bridge.js'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

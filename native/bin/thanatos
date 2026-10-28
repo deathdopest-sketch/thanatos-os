@@ -24,7 +24,8 @@ ${pink}thanatos${off} — Thanatos OS control
   ${violet}lang list${off}                  list language plugins
   ${violet}lang install <name|all>${off}    install a toolchain (node python rust go c vita reaper)
   ${violet}web start|stop|status|open${off} run the Lilly desktop on localhost:$WEB_PORT
-  ${violet}stumble start|stop|status|log${off} keep StumbleChat rooms open for the Stumble Live widget
+  ${violet}stumble install${off}            set up the StumbleChat bridge (opens by itself from the desktop)
+  ${violet}stumble start|stop|status|log${off} open/close its Chrome window, check on it
   ${violet}new <kind> <name>${off}          scaffold a project (node python rust go c vita reaper)
   ${violet}log [text]${off}                 add to your learning journal (no text: open in \$EDITOR)
   ${violet}review [days]${off}              show recent journal entries (default 7)
@@ -110,9 +111,18 @@ update() {
   npm run build || die "build failed (output above)"
   ln -sfn "$THANATOS_HOME/native/bin/thanatos" "$HOME/.local/bin/thanatos"
   web stop >/dev/null; web start
-  if curl -fsS -o /dev/null "http://127.0.0.1:${STUMBLE_BRIDGE_PORT:-4180}/health" 2>/dev/null; then
-    if ! git diff --quiet "$before" HEAD -- native/stumble-bridge/package-lock.json; then (cd native/stumble-bridge && npm ci --no-audit --no-fund); fi
-    stumble stop >/dev/null; stumble start
+  if systemctl --user cat "$STUMBLE_UNIT" >/dev/null 2>&1; then
+    # refresh the unit, reinstall deps if they changed, restart; reopen Chrome if it was open
+    local chrome_was_open; chrome_was_open=$(curl -fsS "http://127.0.0.1:${STUMBLE_BRIDGE_PORT:-4180}/health" 2>/dev/null | grep -c '"chrome":true' || true)
+    if ! git diff --quiet "$before" HEAD -- native/stumble-bridge/package-lock.json; then stumble install >/dev/null
+    else
+      sed "s#%h/thanatos-os#$THANATOS_HOME#" native/systemd/user/$STUMBLE_UNIT > "$HOME/.config/systemd/user/$STUMBLE_UNIT"
+      systemctl --user daemon-reload; systemctl --user restart "$STUMBLE_UNIT"
+    fi
+    [ "$chrome_was_open" = 1 ] && stumble start >/dev/null
+  elif [ -d native/stumble-bridge/node_modules ]; then
+    # set up before the background service existed: switch over to it
+    stumble install
   fi
   say "updated to $(git log -1 --format='%h %s')"
 }
@@ -150,38 +160,66 @@ web() {
 
 # ---------- stumble ----------
 # The StumbleChat bridge: its own Chrome window holds your rooms open (and answers
-# the site's pings), and streams chat + cams to the Stumble Live widget.
+# the site's pings), and streams chat + cams to the Stumble Live widget. Installed
+# as a background service, it opens Chrome by itself when you open the StumbleChat
+# or Stumble Live app, so these commands are mostly for setup and troubleshooting.
+STUMBLE_UNIT=thanatos-stumble.service
 stumble() {
   local dir="$THANATOS_HOME/native/stumble-bridge" port="${STUMBLE_BRIDGE_PORT:-4180}"
   running() { curl -fsS -o /dev/null "http://127.0.0.1:$port/health" 2>/dev/null; }
+  has_unit() { systemctl --user cat "$STUMBLE_UNIT" >/dev/null 2>&1; }
+  control() { curl -fsS -X POST -H 'X-Thanatos: 1' "http://127.0.0.1:$port/$1" >/dev/null; }
+  wait_up() { for _ in $(seq 20); do running && return 0; sleep 0.5; done; return 1; }
   case "${1:-status}" in
     install)
       command -v node >/dev/null || die "node missing: thanatos lang install node"
       if [ "$(uname -m)" != x86_64 ]; then
-        # Chrome for Testing has no ARM Linux build; use Debian's Chromium instead.
+        # Chrome for Testing has no ARM Linux build; the bridge uses Debian's Chromium instead.
         command -v chromium >/dev/null || sudo apt-get install -y chromium
         (cd "$dir" && PUPPETEER_SKIP_DOWNLOAD=1 npm ci --no-audit --no-fund)
       else
         (cd "$dir" && npm ci --no-audit --no-fund)
       fi
-      say "stumble bridge installed" ;;
+      # A copy started by hand would hold the port; the service takes over from it.
+      if [ -f "$DATA/stumble.pid" ]; then kill -TERM -- "-$(cat "$DATA/stumble.pid")" 2>/dev/null || true; rm -f "$DATA/stumble.pid"; sleep 1; fi
+      mkdir -p "$HOME/.config/systemd/user"
+      sed "s#%h/thanatos-os#$THANATOS_HOME#" "$THANATOS_HOME/native/systemd/user/$STUMBLE_UNIT" > "$HOME/.config/systemd/user/$STUMBLE_UNIT"
+      if systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now "$STUMBLE_UNIT" 2>/dev/null; then
+        say "stumble bridge installed and running in the background"
+        say "open StumbleChat or Stumble Live on the desktop and its Chrome window opens for you to sign in"
+      else
+        say "stumble bridge installed. No background services here, so run 'thanatos stumble start' when you want it"
+      fi ;;
     start)
-      running && { say "already running on ws://127.0.0.1:$port"; return; }
-      [ -d "$dir/node_modules" ] || stumble install
-      if [ -z "${BROWSER_PATH:-}" ] && [ "$(uname -m)" != x86_64 ]; then export BROWSER_PATH; BROWSER_PATH=$(command -v chromium); fi
-      export THANATOS_ORIGINS="${THANATOS_ORIGINS:-http://localhost:$WEB_PORT,http://127.0.0.1:$WEB_PORT}"
-      mkdir -p "$DATA"
-      (cd "$dir" && setsid bash -c 'echo $$ > "$1"; exec node bridge.js' _ "$DATA/stumble.pid" >"$DATA/stumble.log" 2>&1 < /dev/null &)
-      for _ in $(seq 20); do running && break; sleep 0.5; done
-      running || die "bridge didn't start; see $DATA/stumble.log"
-      say "bridge up. Sign in to StumbleChat in its Chrome window, then open Stumble Live" ;;
+      if ! running; then
+        if has_unit; then systemctl --user start "$STUMBLE_UNIT"
+        else
+          [ -d "$dir/node_modules" ] || stumble install
+          running || {
+            export THANATOS_ORIGINS="${THANATOS_ORIGINS:-http://localhost:$WEB_PORT,http://127.0.0.1:$WEB_PORT}"
+            mkdir -p "$DATA"
+            (cd "$dir" && setsid bash -c 'echo $$ > "$1"; exec node bridge.js' _ "$DATA/stumble.pid" >"$DATA/stumble.log" 2>&1 < /dev/null &)
+          }
+        fi
+        wait_up || die "bridge didn't start; see: thanatos stumble log"
+      fi
+      control start || die "couldn't open Chrome; see: thanatos stumble log"
+      say "StumbleChat is open in the bridge's Chrome window. Sign in there, then use Stumble Live" ;;
     stop)
-      if [ -f "$DATA/stumble.pid" ]; then kill -TERM -- "-$(cat "$DATA/stumble.pid")" 2>/dev/null || true; rm -f "$DATA/stumble.pid"; fi
-      say "bridge stopped (rooms are remembered for next start)" ;;
+      # Closes the Chrome window. The service stays ready for the desktop to reopen it.
+      if has_unit; then running && control stop; say "StumbleChat window closed (rooms are remembered)"
+      else
+        if [ -f "$DATA/stumble.pid" ]; then kill -TERM -- "-$(cat "$DATA/stumble.pid")" 2>/dev/null || true; rm -f "$DATA/stumble.pid"; fi
+        say "bridge stopped (rooms are remembered for next start)"
+      fi ;;
     status)
       if running; then say "running: $(curl -fsS "http://127.0.0.1:$port/health")"
-      else say "not running (thanatos stumble start)"; fi ;;
-    log) tail -n 50 -f "$DATA/stumble.log" ;;
+      elif has_unit; then say "service installed but not running: systemctl --user status $STUMBLE_UNIT"
+      elif [ -d "$dir/node_modules" ]; then say "not running (thanatos stumble start, or thanatos stumble install to have it start by itself)"
+      else say "not installed (thanatos stumble install)"; fi ;;
+    log)
+      if has_unit; then journalctl --user -u "$STUMBLE_UNIT" -n 50 -f
+      else tail -n 50 -f "$DATA/stumble.log"; fi ;;
     *) die "usage: thanatos stumble install|start|stop|status|log" ;;
   esac
 }

@@ -7,11 +7,12 @@ import { useStumbleLive } from '../lib/stumble-live-store';
 // The full view of the rooms the bridge keeps open. The connection itself lives in
 // the shared store, so closing this window doesn't drop anything.
 export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
-  const { link, chrome, rooms, lines, frames, error, send, focusRoom, setFocusRoom, clearUnread } = useStumbleLive();
+  const { link, chrome, rooms, lines, frames, error, send, focusRoom, setFocusRoom, clearUnread, openChrome } = useStumbleLive();
   const [active, setActive] = useState<string | null>(focusRoom);
   const [joinInput, setJoinInput] = useState('');
 
-  useEffect(() => { useStumbleLive.getState().connect(); clearUnread(); }, [clearUnread]);
+  // opening this app opens StumbleChat in the bridge's Chrome window (sign in there)
+  useEffect(() => { useStumbleLive.getState().openChrome(); clearUnread(); }, [clearUnread]);
   // a toast or the widget asked to show a particular room
   useEffect(() => { if (focusRoom) { setActive(focusRoom); setFocusRoom(null); } }, [focusRoom, setFocusRoom]);
 
@@ -40,18 +41,26 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
     send({ type: 'watch', room: room.room, handles: on ? room.watching.filter((h) => h !== handle) : [...room.watching, handle] });
   };
 
-  if (link !== 'online') {
+  if (link !== 'online' || !chrome) {
     return (
       <div className="chat-app">
         <div className="chat-panel chat-launch">
           <h3>Stumble Live</h3>
-          <p className="chat-hint">
-            {link === 'connecting' ? 'Connecting to the StumbleChat bridge…' : 'The StumbleChat bridge is not running.'}
-          </p>
-          <p className="chat-hint">
-            Start it in the Linux terminal with <code>thanatos stumble start</code>. It opens its own Chrome window:
-            sign in to StumbleChat there yourself, then join rooms here. It keeps the rooms open even when this window is closed.
-          </p>
+          {link === 'connecting' ? <p className="chat-hint">Connecting to the StumbleChat bridge…</p>
+            : link === 'offline' ? (
+              <>
+                <p className="chat-hint">The StumbleChat bridge isn&apos;t set up on this machine yet.</p>
+                <p className="chat-hint">
+                  Run <code>thanatos stumble install</code> once in the Linux terminal. After that it runs in the background,
+                  and opening this app opens StumbleChat for you.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="chat-hint">Opening StumbleChat in its own Chrome window. Sign in there if it asks; you only need to do that once.</p>
+                <button type="button" className="primary-action" onClick={openChrome}><Radio size={15} /> Open StumbleChat</button>
+              </>
+            )}
         </div>
       </div>
     );
@@ -76,7 +85,6 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
         </form>
       </div>
 
-      {!chrome ? <p className="chat-hint stumble-warn">The bridge's Chrome window closed. Run <code>thanatos stumble start</code> again.</p> : null}
       {error ? <p className="chat-hint stumble-warn">{error}</p> : null}
 
       {room ? (
