@@ -52,7 +52,7 @@ Role-based mod tools are next: automod actions and autobans for owners and super
 
 ## Everything else on the desktop
 
-Thanatos is a full desktop in your browser, with windows, a start menu and a taskbar. It ships with 60+ apps:
+Thanatos is a full desktop in your browser, with windows, a start menu and a taskbar. It ships with 60 apps:
 
 - **Developer tools:** Code Studio (CodeMirror 6), terminal, git client, API client, SQL manager, JSON/diff/hex/regex/hash tools, network monitor, Linux man pages.
 - **System:** files, settings, tasks, clock, calendar, weather, notes, mail.
