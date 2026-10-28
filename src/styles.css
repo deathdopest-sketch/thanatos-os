@@ -4687,3 +4687,51 @@ body {
   .chat-layout.stats-open { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(320px, 1fr) auto; }
   .chat-room-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ─── RotVice pets on the desktop ─── */
+.desktop-pets {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 96px;
+  z-index: 5500; /* above windows (500), below the taskbar (6000) */
+  pointer-events: none;
+}
+
+.desktop-pet {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  pointer-events: auto;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6));
+}
+
+.desktop-pet canvas {
+  display: block;
+}
+
+.desktop-pet-card {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  display: grid;
+  min-width: max-content;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 47, 88, 0.4);
+  border-radius: 7px;
+  background: rgba(8, 3, 5, 0.92);
+  color: #c6b7aa;
+  font-size: 0.78rem;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.desktop-pet-card strong {
+  color: #ff75ce;
+  font-size: 0.86rem;
+}
