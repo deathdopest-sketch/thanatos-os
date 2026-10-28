@@ -20,6 +20,7 @@ usage() {
 ${pink}thanatos${off} — Thanatos OS control
 
   ${violet}doctor${off}                     check toolchains and setup
+  ${violet}update${off}                     pull the latest Thanatos, rebuild, restart what's running
   ${violet}lang list${off}                  list language plugins
   ${violet}lang install <name|all>${off}    install a toolchain (node python rust go c vita reaper)
   ${violet}web start|stop|status|open${off} run the Lilly desktop on localhost:$WEB_PORT
@@ -96,6 +97,24 @@ lang() {
       say "done. open a new shell (or: source ~/.bashrc) to pick up PATH changes" ;;
     *) die "usage: thanatos lang list | install <name|all>" ;;
   esac
+}
+
+# ---------- update ----------
+update() {
+  cd "$THANATOS_HOME" || die "repo not at $THANATOS_HOME (set THANATOS_HOME)"
+  command -v npm >/dev/null || die "npm missing: thanatos lang install node, then open a new terminal"
+  local before; before=$(git rev-parse HEAD)
+  git pull --ff-only || die "git pull failed; commit or stash local changes in $THANATOS_HOME"
+  # reinstall only when dependencies changed
+  if ! git diff --quiet "$before" HEAD -- package-lock.json || [ ! -d node_modules ]; then npm ci --no-audit --no-fund; fi
+  npm run build || die "build failed (output above)"
+  ln -sfn "$THANATOS_HOME/native/bin/thanatos" "$HOME/.local/bin/thanatos"
+  web stop >/dev/null; web start
+  if curl -fsS -o /dev/null "http://127.0.0.1:${STUMBLE_BRIDGE_PORT:-4180}/health" 2>/dev/null; then
+    if ! git diff --quiet "$before" HEAD -- native/stumble-bridge/package-lock.json; then (cd native/stumble-bridge && npm ci --no-audit --no-fund); fi
+    stumble stop >/dev/null; stumble start
+  fi
+  say "updated to $(git log -1 --format='%h %s')"
 }
 
 # ---------- web ----------
@@ -279,6 +298,7 @@ learn() {
 cmd=${1:-help}; shift || true
 case "$cmd" in
   doctor) doctor ;;
+  update) update ;;
   lang) lang "$@" ;;
   web) web "$@" ;;
   stumble) stumble "$@" ;;

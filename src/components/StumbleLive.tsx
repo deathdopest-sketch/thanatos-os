@@ -1,58 +1,19 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Radio, Video, VideoOff, X } from 'lucide-react';
 import clsx from 'clsx';
-import {
-  MAX_WATCHED_CAMS, STUMBLE_BRIDGE_URL, appendLines, parseBridgeMessage,
-  type StumbleLine, type StumbleLiveRoom
-} from '../lib/stumble-live';
+import { MAX_WATCHED_CAMS, isMention, type StumbleLine } from '../lib/stumble-live';
+import { useStumbleLive } from '../lib/stumble-live-store';
 
-type Link = 'connecting' | 'online' | 'offline';
-
-// Live chat + cams from the rooms the bridge keeps open. Closing or minimizing this
-// window only drops the view: the bridge stays in the rooms and replays recent chat.
+// The full view of the rooms the bridge keeps open. The connection itself lives in
+// the shared store, so closing this window doesn't drop anything.
 export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
-  const [link, setLink] = useState<Link>('connecting');
-  const [chrome, setChrome] = useState(true);
-  const [rooms, setRooms] = useState<StumbleLiveRoom[]>([]);
-  const [lines, setLines] = useState<StumbleLine[]>([]);
-  const [frames, setFrames] = useState<Record<string, string>>({});
-  const [active, setActive] = useState<string | null>(null);
+  const { link, chrome, rooms, lines, frames, error, send, focusRoom, setFocusRoom, clearUnread } = useStumbleLive();
+  const [active, setActive] = useState<string | null>(focusRoom);
   const [joinInput, setJoinInput] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
 
-  useEffect(() => {
-    let stopped = false;
-    let retry = 0;
-    let timer = 0;
-    const connect = () => {
-      setLink('connecting');
-      const ws = new WebSocket(STUMBLE_BRIDGE_URL);
-      wsRef.current = ws;
-      ws.onopen = () => { retry = 0; setLink('online'); setError(null); setChrome(true); };
-      ws.onmessage = (e) => {
-        const m = parseBridgeMessage(String(e.data));
-        if (!m) return;
-        if (m.type === 'hello') { setRooms(m.rooms); setLines(m.history.slice(-600)); }
-        else if (m.type === 'rooms') setRooms(m.rooms);
-        else if (m.type === 'chat') setLines((l) => appendLines(l, [m.line]));
-        else if (m.type === 'frame') setFrames((f) => ({ ...f, [`${m.room}/${m.handle}`]: m.data }));
-        else if (m.type === 'status') setChrome(m.chrome);
-        else if (m.type === 'error') setError(m.message);
-      };
-      ws.onclose = () => {
-        if (stopped) return;
-        setLink('offline');
-        timer = window.setTimeout(connect, Math.min(15_000, 1000 * 2 ** retry++));
-      };
-    };
-    connect();
-    return () => { stopped = true; window.clearTimeout(timer); wsRef.current?.close(); };
-  }, []);
-
-  const send = useCallback((msg: object) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(msg));
-  }, []);
+  useEffect(() => { useStumbleLive.getState().connect(); clearUnread(); }, [clearUnread]);
+  // a toast or the widget asked to show a particular room
+  useEffect(() => { if (focusRoom) { setActive(focusRoom); setFocusRoom(null); } }, [focusRoom, setFocusRoom]);
 
   // keep a valid room selected
   useEffect(() => {
@@ -135,7 +96,7 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
                 })}
               </div>
             ) : null}
-            <ChatFeed lines={roomLines} />
+            <ChatFeed lines={roomLines} self={room.self} />
           </div>
           <aside className="chat-stats stumble-side">
             <h3>Cams</h3>
@@ -167,7 +128,7 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
   );
 }
 
-const ChatFeed = memo(function ChatFeed({ lines }: { lines: StumbleLine[] }) {
+export const ChatFeed = memo(function ChatFeed({ lines, self }: { lines: StumbleLine[]; self: string | null }) {
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   useEffect(() => {
@@ -180,7 +141,7 @@ const ChatFeed = memo(function ChatFeed({ lines }: { lines: StumbleLine[] }) {
       pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     }}>
       {lines.length === 0 ? <p className="chat-hint">Waiting for chat…</p> : lines.map((l, i) => (
-        <div key={`${l.ts}-${i}`} className={clsx('stumble-line', l.kind)}>
+        <div key={`${l.ts}-${i}`} className={clsx('stumble-line', l.kind, isMention(l, [self]) && 'mention')}>
           <time>{new Date(l.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
           {l.kind === 'system' ? <span>{l.text}</span> : <><strong>{l.nick ?? '?'}</strong><span>{l.text}</span></>}
         </div>
