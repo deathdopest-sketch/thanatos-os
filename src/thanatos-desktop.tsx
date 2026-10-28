@@ -76,6 +76,8 @@ import clsx from 'clsx';
 import { nanoid } from 'nanoid';
 import { appCategories, appRegistry, type AppCategory, type ThanatosApp } from './apps';
 import LillyClock from './components/LillyClock';
+import DesktopPets from './components/DesktopPets';
+import { parseRotvicePets, useRotvicePets } from './lib/rotvice-pets';
 import { normalizePath } from './lib/vfs';
 import { useVfsListing } from './lib/use-vfs-listing';
 
@@ -154,6 +156,7 @@ type MumbleChatStats = {
 type MumbleChatPayload = {
   type?: string; loggedIn?: unknown; userId?: unknown; username?: unknown; displayName?: unknown;
   avatarUrl?: unknown; unreadPms?: unknown; onlineFriends?: unknown; offlineFriends?: unknown; totalFriends?: unknown;
+  pets?: unknown;
 };
 type AudioPulse = {
   level: number;
@@ -2167,6 +2170,7 @@ function openChatWindow(url: string) {
 }
 
 function RotViceApp() {
+  const setPets = useRotvicePets((s) => s.setPets);
   const [frameKey, setFrameKey] = useState(0);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [stats, setStats] = useState<MumbleChatStats>({
@@ -2180,6 +2184,8 @@ function RotViceApp() {
       if (e.origin !== ROTVICE_ORIGIN) return;
       const p = e.data as MumbleChatPayload;
       if (p.type !== 'mumblechat:stats') return;
+      if (p.loggedIn === false) setPets([]);
+      else if ('pets' in p) setPets(parseRotvicePets(p.pets, ROTVICE_ORIGIN));
       setStats({
         loggedIn: typeof p.loggedIn === 'boolean' ? p.loggedIn : null,
         userId: typeof p.userId === 'number' ? p.userId : null,
@@ -2197,7 +2203,7 @@ function RotViceApp() {
     };
     window.addEventListener('message', h);
     return () => window.removeEventListener('message', h);
-  }, []);
+  }, [setPets]);
 
   const requestStats = useCallback(() => {
     setStats((s) => ({ ...s, status: 'checking', message: frameLoaded ? 'Requesting stats...' : 'Waiting for frame...' }));
@@ -2740,6 +2746,7 @@ export function ThanatosDesktop() {
             onMaximize={() => patch(w.id, { maximized: !w.maximized, z: topZ + 1 })} />
         ))}
       </div>
+      {booted ? <DesktopPets visible={windows.some((w) => w.app.id === 'rotvice')} /> : null}
       <AnimatePresence>{startOpen ? <StartMenu onLaunch={launch} /> : null}</AnimatePresence>
       <nav className="taskbar">
         <button type="button" className={clsx('tb-start', startOpen && 'open')} onClick={() => setStartOpen((v) => !v)}>
