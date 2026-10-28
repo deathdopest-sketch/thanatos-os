@@ -4688,6 +4688,139 @@ body {
   .chat-room-form { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ─── Stumble Live ─── */
+.stumble-live { display: flex; flex-direction: column; }
+.stumble-live > .stumble-body,
+.stumble-live > .chat-panel { flex: 1; min-height: 0; }
+
+.stumble-tab {
+  display: inline-flex;
+  border: 1px solid rgba(255, 47, 88, 0.28);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.chat-toolbar .stumble-tab button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  padding: 0 10px;
+}
+
+.chat-toolbar .stumble-tab button + button { padding: 0 7px; border-left: 1px solid rgba(255, 47, 88, 0.2); }
+.stumble-tab.active { border-color: rgba(255, 28, 62, 0.8); box-shadow: 0 0 14px rgba(255, 0, 50, 0.25); }
+.chat-toolbar .stumble-tab.active button:first-child { background: linear-gradient(180deg, rgba(255, 0, 50, 0.44), rgba(52, 0, 12, 0.9)); }
+
+.stumble-dot { width: 8px; height: 8px; border-radius: 50%; background: #6c6470; }
+.stumble-dot.on { background: #5effa4; box-shadow: 0 0 8px rgba(94, 255, 164, 0.8); }
+.stumble-dot.wait { background: #c7a45e; box-shadow: 0 0 8px rgba(199, 164, 94, 0.8); }
+
+.stumble-join { display: flex; gap: 6px; margin-left: auto; }
+
+.stumble-join input {
+  width: 150px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 47, 88, 0.28);
+  border-radius: 7px;
+  background: rgba(18, 5, 7, 0.82);
+  color: #fff4ec;
+  font: inherit;
+}
+
+.stumble-warn { color: #ff9db3; }
+.stumble-live code, .chat-launch code { font-family: 'JetBrains Mono', monospace; color: #fff4ec; }
+
+.stumble-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 230px);
+  gap: 10px;
+}
+
+.stumble-main {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stumble-main > .stumble-feed { flex: 1; }
+
+.stumble-cams {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  flex: none;
+  max-height: 46%;
+  overflow: auto;
+}
+
+.stumble-cams figure {
+  position: relative;
+  margin: 0;
+  border: 1px solid rgba(255, 47, 88, 0.28);
+  border-radius: 7px;
+  overflow: hidden;
+  background: #050203;
+  aspect-ratio: 4 / 3;
+}
+
+.stumble-cams img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.stumble-cam-wait { display: grid; height: 100%; place-items: center; color: #6c6470; }
+
+.stumble-cams figcaption {
+  position: absolute;
+  left: 6px;
+  bottom: 5px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff4ec;
+  font-size: 0.78rem;
+}
+
+.stumble-feed {
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 47, 88, 0.24);
+  border-radius: 7px;
+  background: rgba(3, 2, 3, 0.72);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.stumble-line { display: flex; gap: 8px; overflow-wrap: anywhere; }
+.stumble-line time { flex: none; color: #6c6470; font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; padding-top: 2px; }
+.stumble-line strong { flex: none; color: #ff7aa0; }
+.stumble-line span { color: #fff4ec; }
+.stumble-line.self strong { color: #5effa4; }
+.stumble-line.system span { color: #c7a45e; font-style: italic; }
+
+.stumble-side ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.stumble-side label { display: flex; gap: 8px; align-items: center; color: #fff4ec; cursor: pointer; }
+.stumble-side input { accent-color: #ff315e; }
+
+.stumble-side button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 47, 88, 0.28);
+  border-radius: 7px;
+  background: rgba(18, 5, 7, 0.82);
+  color: #fff4ec;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .stumble-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 1fr) auto; }
+  .stumble-join { margin-left: 0; }
+}
+
 /* ─── RotVice pets on the desktop ─── */
 .desktop-pets {
   position: fixed;

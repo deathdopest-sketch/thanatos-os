@@ -23,6 +23,7 @@ ${pink}thanatos${off} — Thanatos OS control
   ${violet}lang list${off}                  list language plugins
   ${violet}lang install <name|all>${off}    install a toolchain (node python rust go c vita reaper)
   ${violet}web start|stop|status|open${off} run the Lilly desktop on localhost:$WEB_PORT
+  ${violet}stumble start|stop|status|log${off} keep StumbleChat rooms open for the Stumble Live widget
   ${violet}new <kind> <name>${off}          scaffold a project (node python rust go c vita reaper)
   ${violet}log [text]${off}                 add to your learning journal (no text: open in \$EDITOR)
   ${violet}review [days]${off}              show recent journal entries (default 7)
@@ -125,6 +126,44 @@ web() {
       if command -v garcon-url-handler >/dev/null; then garcon-url-handler "http://localhost:$WEB_PORT"
       else xdg-open "http://localhost:$WEB_PORT" >/dev/null 2>&1 || say "open http://localhost:$WEB_PORT"; fi ;;
     *) die "usage: thanatos web start|stop|status|open" ;;
+  esac
+}
+
+# ---------- stumble ----------
+# The StumbleChat bridge: its own Chrome window holds your rooms open (and answers
+# the site's pings), and streams chat + cams to the Stumble Live widget.
+stumble() {
+  local dir="$THANATOS_HOME/native/stumble-bridge" port="${STUMBLE_BRIDGE_PORT:-4180}"
+  running() { curl -fsS -o /dev/null "http://127.0.0.1:$port/health" 2>/dev/null; }
+  case "${1:-status}" in
+    install)
+      command -v node >/dev/null || die "node missing: thanatos lang install node"
+      if [ "$(uname -m)" != x86_64 ]; then
+        # Chrome for Testing has no ARM Linux build; use Debian's Chromium instead.
+        command -v chromium >/dev/null || sudo apt-get install -y chromium
+        (cd "$dir" && PUPPETEER_SKIP_DOWNLOAD=1 npm ci --no-audit --no-fund)
+      else
+        (cd "$dir" && npm ci --no-audit --no-fund)
+      fi
+      say "stumble bridge installed" ;;
+    start)
+      running && { say "already running on ws://127.0.0.1:$port"; return; }
+      [ -d "$dir/node_modules" ] || stumble install
+      if [ -z "${BROWSER_PATH:-}" ] && [ "$(uname -m)" != x86_64 ]; then export BROWSER_PATH; BROWSER_PATH=$(command -v chromium); fi
+      export THANATOS_ORIGINS="${THANATOS_ORIGINS:-http://localhost:$WEB_PORT,http://127.0.0.1:$WEB_PORT}"
+      mkdir -p "$DATA"
+      (cd "$dir" && setsid bash -c 'echo $$ > "$1"; exec node bridge.js' _ "$DATA/stumble.pid" >"$DATA/stumble.log" 2>&1 < /dev/null &)
+      for _ in $(seq 20); do running && break; sleep 0.5; done
+      running || die "bridge didn't start; see $DATA/stumble.log"
+      say "bridge up. Sign in to StumbleChat in its Chrome window, then open Stumble Live" ;;
+    stop)
+      if [ -f "$DATA/stumble.pid" ]; then kill -TERM -- "-$(cat "$DATA/stumble.pid")" 2>/dev/null || true; rm -f "$DATA/stumble.pid"; fi
+      say "bridge stopped (rooms are remembered for next start)" ;;
+    status)
+      if running; then say "running: $(curl -fsS "http://127.0.0.1:$port/health")"
+      else say "not running (thanatos stumble start)"; fi ;;
+    log) tail -n 50 -f "$DATA/stumble.log" ;;
+    *) die "usage: thanatos stumble install|start|stop|status|log" ;;
   esac
 }
 
@@ -242,6 +281,7 @@ case "$cmd" in
   doctor) doctor ;;
   lang) lang "$@" ;;
   web) web "$@" ;;
+  stumble) stumble "$@" ;;
   new) new_project "$@" ;;
   log) log_cmd "$@" ;;
   review) review "$@" ;;
