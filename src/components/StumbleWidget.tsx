@@ -9,7 +9,7 @@ const WIDTH = 340;
 // Live StumbleChat on the desktop itself: a small draggable widget that shows while
 // the bridge is running, plus a toast (and chime) whenever someone mentions you.
 export function StumbleWidget({ onOpen }: { onOpen: () => void }) {
-  const { link, rooms, lines, frames, prefs, unread, setPrefs, setFocusRoom, clearUnread } = useStumbleLive();
+  const { link, chrome, rooms, lines, frames, prefs, unread, setPrefs, setFocusRoom, clearUnread } = useStumbleLive();
   const [active, setActive] = useState<string | null>(null);
   const drag = useRef<{ dx: number; dy: number } | null>(null);
 
@@ -22,7 +22,7 @@ export function StumbleWidget({ onOpen }: { onOpen: () => void }) {
   const room = rooms.find((r) => r.room === active) ?? null;
   const roomLines = useMemo(() => lines.filter((l) => l.room === active).slice(-80), [lines, active]);
 
-  if (link !== 'online' || !prefs.visible) return null;
+  if (link !== 'online' || !chrome || !prefs.visible) return null;
 
   const x = prefs.x < 0 ? window.innerWidth - WIDTH - 16 : Math.min(prefs.x, window.innerWidth - 120);
   const y = Math.max(8, Math.min(prefs.y, window.innerHeight - 120));
@@ -102,15 +102,26 @@ export function StumbleToasts({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-// Taskbar icon: shows the bridge state and unread mentions; click to show or hide the widget.
+// Taskbar icon: green while StumbleChat is open, grey when the bridge is idle (click
+// to open it), dark when the bridge isn't installed or running. Red badge = unread mentions.
 export function StumbleTrayButton() {
-  const { link, rooms, unread, prefs, setPrefs, clearUnread } = useStumbleLive();
+  const { link, chrome, rooms, unread, prefs, setPrefs, clearUnread, openChrome } = useStumbleLive();
   useEffect(() => { useStumbleLive.getState().connect(); }, []);
-  const live = link === 'online';
-  const title = !live ? 'StumbleChat bridge offline (thanatos stumble start)' : `${rooms.length} room${rooms.length === 1 ? '' : 's'} open. Click to ${prefs.visible ? 'hide' : 'show'} the widget`;
+  const online = link === 'online';
+  const live = online && chrome;
+  const title = !online
+    ? 'StumbleChat bridge not running (set it up once with: thanatos stumble install)'
+    : !chrome
+      ? 'StumbleChat is closed. Click to open it'
+      : `${rooms.length} room${rooms.length === 1 ? '' : 's'} open. Click to ${prefs.visible ? 'hide' : 'show'} the widget`;
   return (
-    <button type="button" className={clsx('tb-stumble', live && 'live')} title={title} aria-label={title}
-      onClick={() => { if (live) { setPrefs({ visible: !prefs.visible, collapsed: false }); clearUnread(); } }}>
+    <button type="button" className={clsx('tb-stumble', live && 'live', online && !chrome && 'idle')} title={title} aria-label={title}
+      onClick={() => {
+        if (!online) return;
+        if (!chrome) { openChrome(); setPrefs({ visible: true, collapsed: false }); return; }
+        setPrefs({ visible: !prefs.visible, collapsed: false });
+        clearUnread();
+      }}>
       <Radio size={14} />
       {unread ? <span className="stumble-badge">{unread}</span> : null}
     </button>

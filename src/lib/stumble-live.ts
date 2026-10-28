@@ -10,7 +10,7 @@ export type StumbleCam = { handle: string; nick: string | null };
 export type StumbleLiveRoom = { room: string; self: string | null; connected: boolean; reopening: boolean; cams: StumbleCam[]; watching: string[] };
 
 export type BridgeMessage =
-  | { type: 'hello'; rooms: StumbleLiveRoom[]; history: StumbleLine[] }
+  | { type: 'hello'; chrome: boolean; rooms: StumbleLiveRoom[]; history: StumbleLine[] }
   | { type: 'rooms'; rooms: StumbleLiveRoom[] }
   | { type: 'chat'; line: StumbleLine }
   | { type: 'frame'; room: string; handle: string; data: string }
@@ -51,7 +51,7 @@ export function parseBridgeMessage(raw: string): BridgeMessage | null {
   switch (m?.type) {
     case 'hello': {
       const history = Array.isArray(m.history) ? m.history.map(parseLine).filter((l): l is StumbleLine => l !== null) : [];
-      return { type: 'hello', rooms: parseRooms(m.rooms), history };
+      return { type: 'hello', chrome: m.chrome === true, rooms: parseRooms(m.rooms), history };
     }
     case 'rooms': return { type: 'rooms', rooms: parseRooms(m.rooms) };
     case 'chat': {

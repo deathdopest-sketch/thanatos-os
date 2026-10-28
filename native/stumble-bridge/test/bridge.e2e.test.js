@@ -57,14 +57,22 @@ test('streams chat and watched cams from a room to the desktop', { skip: !proces
   const server = await bridge.listen();
   const port = server.address().port;
   try {
-    await bridge.launch();
+    // starts idle: no Chrome until the desktop asks
+    assert.equal(bridge.chromeOpen, false);
+    const health = await (await fetch(`http://127.0.0.1:${port}/health`)).json();
+    assert.equal(health.chrome, false);
+    // the control endpoint ignores requests without the Thanatos header (web pages can't add it)
+    assert.equal((await fetch(`http://127.0.0.1:${port}/start`, { method: 'POST' })).status, 404);
 
     // other origins are refused
     const evil = new WS(`ws://127.0.0.1:${port}`, { origin: 'https://evil.example' });
     await new Promise((resolve) => { evil.on('error', resolve); evil.on('unexpected-response', resolve); });
 
     const ws = new WS(`ws://127.0.0.1:${port}`, { origin: 'http://localhost:4173' });
-    await waitFor(ws, (m) => m.type === 'hello');
+    const hello = await waitFor(ws, (m) => m.type === 'hello');
+    assert.equal(hello.chrome, false);
+    ws.send(JSON.stringify({ type: 'start' }));
+    await waitFor(ws, (m) => m.type === 'status' && m.chrome === true);
     ws.send(JSON.stringify({ type: 'join', room: 'zombs' }));
 
     const chat = await waitFor(ws, (m) => m.type === 'chat' && m.line.kind === 'chat');
@@ -88,6 +96,16 @@ test('streams chat and watched cams from a room to the desktop', { skip: !proces
     await waitFor(ws, (m) => m.type === 'rooms' && m.rooms[0]?.connected && !m.rooms[0].reopening);
 
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(tmp, 'rooms.json'), 'utf8')), ['zombs']);
+
+    // closing Chrome leaves the bridge running and keeps the saved rooms...
+    ws.send(JSON.stringify({ type: 'stop' }));
+    await waitFor(ws, (m) => m.type === 'status' && m.chrome === false);
+    await new Promise((r) => setTimeout(r, 800));
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(tmp, 'rooms.json'), 'utf8')), ['zombs']);
+    // ...and opening it again (here via the CLI's endpoint) brings the room back
+    const res = await fetch(`http://127.0.0.1:${port}/start`, { method: 'POST', headers: { 'X-Thanatos': '1' } });
+    assert.equal((await res.json()).chrome, true);
+    await waitFor(ws, (m) => m.type === 'rooms' && m.rooms[0]?.room === 'zombs' && m.rooms[0].connected);
     ws.send(JSON.stringify({ type: 'leave', room: 'zombs' }));
     await waitFor(ws, (m) => m.type === 'rooms' && m.rooms.length === 0);
     ws.close();

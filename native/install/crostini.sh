@@ -98,6 +98,12 @@ else
   echo "  node missing; run: thanatos lang install node && re-run this script"
 fi
 
+step "StumbleChat bridge"
+if command -v npm >/dev/null; then
+  # background service; opens its Chrome window when you open StumbleChat on the desktop
+  thanatos stumble install || echo "  ! bridge setup failed; retry later with: thanatos stumble install"
+fi
+
 step "done"
 cat <<MSG
   Open a new terminal (or: source ~/.bashrc), then:

@@ -5003,6 +5003,7 @@ body {
 }
 
 .tb-stumble.live { color: #5effa4; }
+.tb-stumble.idle { color: rgba(var(--ui-text), 0.7); }
 .tb-stumble .stumble-badge { position: absolute; top: -7px; right: -9px; min-width: 15px; height: 15px; font-size: 0.62rem; }
 
 @media (prefers-reduced-motion: reduce) {

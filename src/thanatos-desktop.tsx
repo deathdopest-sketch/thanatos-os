@@ -81,6 +81,7 @@ import CustomBackground from './components/CustomBackground';
 import { appearanceVars, useAppearance } from './lib/appearance';
 import StumbleLive from './components/StumbleLive';
 import { StumbleToasts, StumbleTrayButton, StumbleWidget } from './components/StumbleWidget';
+import { useStumbleLive } from './lib/stumble-live-store';
 import { parseRotvicePets, useRotvicePets } from './lib/rotvice-pets';
 import { normalizePath } from './lib/vfs';
 import { useVfsListing } from './lib/use-vfs-listing';
@@ -2281,6 +2282,19 @@ const stumbleRoomUrl = (slug: string) => `${STUMBLECHAT_URL}/room/${encodeURICom
 
 function StumbleChatApp() {
   const [tab, setTab] = useState<'rooms' | 'settings'>('rooms');
+  const bridge = useStumbleLive((st) => st.link === 'online');
+  const chromeOpen = useStumbleLive((st) => st.chrome);
+  const openChrome = useStumbleLive((st) => st.openChrome);
+  const send = useStumbleLive((st) => st.send);
+  // Opening this app opens StumbleChat in the bridge's Chrome window, ready to sign in.
+  // Without the bridge, rooms open in a normal popup window instead.
+  useEffect(() => { openChrome(); }, [openChrome]);
+  const openStumble = () => (bridge ? openChrome() : openChatWindow(STUMBLECHAT_URL));
+  const openRoom = (slug: string) => {
+    if (!bridge) { openChatWindow(stumbleRoomUrl(slug)); return; }
+    send({ type: 'join', room: slug });
+    useStumbleLive.getState().showLive(slug);
+  };
   const [settings, setSettings] = useState<StumbleSettings>(loadStumbleSettings);
   const [roomInput, setRoomInput] = useState('');
   const [roleInput, setRoleInput] = useState<StumbleRole>('member');
@@ -2304,14 +2318,18 @@ function StumbleChatApp() {
       <div className="chat-toolbar">
         <button type="button" className={tab === 'rooms' ? 'primary-action' : ''} onClick={() => setTab('rooms')}><DoorOpen size={15} /> Rooms</button>
         <button type="button" className={tab === 'settings' ? 'primary-action' : ''} onClick={() => setTab('settings')}><Settings size={15} /> Settings</button>
-        <button type="button" onClick={() => openChatWindow(STUMBLECHAT_URL)}><ExternalLink size={15} /> Open StumbleChat</button>
+        <button type="button" onClick={openStumble}><ExternalLink size={15} /> Open StumbleChat</button>
       </div>
 
       {tab === 'rooms' ? (
         <div className="chat-panel">
           <p className="chat-hint">
             {settings.username ? <>Account: <strong>{settings.username}</strong>. </> : null}
-            Rooms open in their own window. Sign in there yourself; Thanatos never sees your password.
+            {bridge
+              ? chromeOpen
+                ? 'StumbleChat is open in the bridge window. Sign in there if you haven’t yet; Thanatos never sees your password. Rooms you open here stay connected in the background.'
+                : 'Opening StumbleChat in the bridge window…'
+              : 'Rooms open in their own window. Sign in there yourself; Thanatos never sees your password. For rooms that stay connected and live chat on the desktop, run thanatos stumble install once.'}
           </p>
           {settings.rooms.length === 0 ? (
             <div className="chat-empty">
@@ -2326,7 +2344,7 @@ function StumbleChatApp() {
                     <strong>{room.slug}</strong>
                     <span className={`chat-role ${room.role}`}>{roleLabel(room.role)}</span>
                   </div>
-                  <button type="button" onClick={() => openChatWindow(stumbleRoomUrl(room.slug))}><ExternalLink size={15} /> Open</button>
+                  <button type="button" onClick={() => openRoom(room.slug)}><ExternalLink size={15} /> Open</button>
                 </li>
               ))}
             </ul>
@@ -2725,6 +2743,9 @@ export function ThanatosDesktop() {
     const app = appRegistry.find((a) => a.id === 'stumblelive');
     if (app) launch(app);
   };
+  // other apps (StumbleChat's room buttons) ask for the Stumble Live window this way
+  const liveRequest = useStumbleLive((st) => st.liveRequest);
+  useEffect(() => { if (liveRequest) openStumbleLive(); }, [liveRequest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patch = (id: string, p: Partial<OpenWindow>) => setWindows((ws) => ws.map((w) => {
     if (w.id !== id) return w;

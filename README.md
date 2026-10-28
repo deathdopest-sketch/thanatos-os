@@ -33,11 +33,7 @@ Your rooms then feed into **Stumble Live** on the desktop:
 
 No scraping your password, no fake clients, no bot accounts. To StumbleChat you're one person in one browser, which is exactly what you are. The only difference is that your browser stops falling asleep.
 
-```bash
-thanatos stumble start   # opens the bridge's Chrome window; sign in once
-```
-
-The widget appears on its own. For the full view, open **Stumble Live** from the start menu. Details are in [`native/stumble-bridge/README.md`](native/stumble-bridge/README.md).
+Open the **StumbleChat** app on the desktop and the bridge's Chrome window opens by itself, ready for you to sign in (you only do that once). The widget appears on its own. For the full view, open **Stumble Live** from the start menu. Details are in [`native/stumble-bridge/README.md`](native/stumble-bridge/README.md).
 
 ### The rest of the chat stack
 
@@ -111,7 +107,7 @@ git clone https://github.com/deathdopest-sketch/thanatos-os.git ~/thanatos-os
 ~/thanatos-os/native/install/crostini.sh
 ```
 
-The installer sets up Node, Python, Rust, Go, C, Reaper, the terminal theme and the `thanatos` command, then builds the desktop and starts it. It's safe to run again if anything fails partway.
+The installer sets up Node, Python, Rust, Go, C, Reaper, the terminal theme and the `thanatos` command, builds the desktop and starts it, and installs the StumbleChat bridge as a background service. It's safe to run again if anything fails partway.
 
 **When it finishes, close the Terminal and open a new one.** The new window is what makes the `thanatos` command work.
 
@@ -131,30 +127,20 @@ thanatos web open
 
 The desktop opens in Chrome at `http://localhost:4173`. To make it feel like a real OS, install it as an app: in Chrome's menu (⋮), choose **Cast, save and share → Install page as app**. Thanatos then gets its own icon on the shelf and opens fullscreen.
 
-### Step 4: Start the StumbleChat bridge
+### Step 4: Open StumbleChat and sign in
 
-```bash
-thanatos stumble start
-```
+On the Thanatos desktop, open the start menu and click **StumbleChat**.
 
-The first run installs the bridge, which takes a minute. Then:
-
-1. **A separate Chrome window opens on StumbleChat.** Log in there yourself. You only do this once, because the bridge remembers your login.
+1. **A separate Chrome window opens on StumbleChat by itself.** Log in there yourself. You only do this once, because the bridge remembers your login.
 2. **Leave that window open.** It's what keeps your rooms connected. You can minimize it.
-3. **Back on the Thanatos desktop, the Stumble Live widget appears** in the top-right corner. Click **Join one**, pick a room, and chat starts flowing in.
-4. To watch cams, open the full **Stumble Live** window (the ⤢ button on the widget), then tick the names under **Cams**.
+3. **Add your rooms.** In the StumbleChat app, go to **Settings** and add your username and rooms. Back on **Rooms**, click **Open** next to a room. It joins in the bridge window, and **Stumble Live** opens with the room's chat.
+4. **The Stumble Live widget appears** in the top-right corner of the desktop. To watch cams, open the full **Stumble Live** window (the ⤢ button on the widget) and tick names under **Cams**.
 
-Optional: open the **StumbleChat** app, then **Settings**, and add your username and rooms. Your saved rooms show up as one-click joins, and your username is also used to spot mentions.
+If the Chrome window doesn't open, the bridge isn't set up yet. Run `thanatos stumble install` once in the Terminal, then click **StumbleChat** again.
 
 ### Step 5: Every day after that
 
-After a Chromebook restart, the desktop starts by itself. The bridge doesn't, so open the Terminal and run:
-
-```bash
-thanatos stumble start
-```
-
-The bridge reopens the rooms you had open last time.
+There's nothing to run. After a Chromebook restart, the desktop and the bridge both start in the background. Open **StumbleChat** (or **Stumble Live**, or click the radio icon by the clock) and the bridge's Chrome window opens again with the rooms you had open last time.
 
 ### Step 6: Make it yours (optional)
 
@@ -183,8 +169,9 @@ This pulls the latest version, rebuilds the desktop and restarts it, and restart
 | `thanatos update` | Gets the latest Thanatos, rebuilds, restarts |
 | `thanatos web open` | Opens the desktop |
 | `thanatos web start` / `stop` / `status` | Controls the desktop server |
-| `thanatos stumble start` | Starts the bridge (and its Chrome window) |
-| `thanatos stumble stop` | Stops the bridge. Your rooms are remembered |
+| `thanatos stumble install` | Sets up the StumbleChat bridge as a background service (the installer does this for you) |
+| `thanatos stumble start` | Opens the bridge's Chrome window, same as clicking the StumbleChat app |
+| `thanatos stumble stop` | Closes the bridge's Chrome window. Your rooms are remembered |
 | `thanatos stumble status` | Shows whether it's running and how many rooms are open |
 | `thanatos stumble log` | Shows what the bridge is doing (Ctrl+C to exit) |
 
@@ -215,11 +202,12 @@ Node isn't installed. Run `thanatos lang install node`, then close the Terminal 
 The desktop is still running an old build. Run `thanatos update`, then reload the tab with Ctrl+Shift+R.
 
 **The widget doesn't appear**
-- Check whether the radio icon by the clock is grey. If it is, the bridge isn't running, so run `thanatos stumble start`.
+- The widget only shows while the bridge's Chrome window is open. If the radio icon by the clock is grey, click it, or open the StumbleChat app.
+- If clicking does nothing, the bridge isn't set up or isn't running. Run `thanatos stumble status`, and `thanatos stumble install` if it says so.
 - If the icon is green, you hid the widget. Click the icon to bring it back.
 
 **The widget vanished and the radio icon went grey**
-The bridge's Chrome window was closed, and closing it stops the bridge. Run `thanatos stumble start` again. Your rooms come back with it.
+The bridge's Chrome window was closed. Click the radio icon or open the StumbleChat app to bring it back. Your rooms come back with it.
 
 **No chime on mentions**
 - Browsers only play sound after you've clicked somewhere on the page, so click anywhere on the desktop once.

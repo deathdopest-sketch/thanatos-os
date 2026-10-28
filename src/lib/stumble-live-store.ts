@@ -37,16 +37,24 @@ type StumbleLiveState = {
   unread: number;
   prefs: WidgetPrefs;
   focusRoom: string | null;
+  liveRequest: number;
   connect: () => void;
   send: (msg: object) => void;
+  /** Ask the bridge to open its Chrome window (or bring it forward). Waits for the connection if needed. */
+  openChrome: () => void;
   dismissToast: (id: number) => void;
   clearUnread: () => void;
   setPrefs: (p: Partial<WidgetPrefs>) => void;
   setFocusRoom: (room: string | null) => void;
+  /** Open the Stumble Live window, optionally on a room. */
+  showLive: (room?: string) => void;
 };
 
 let ws: WebSocket | null = null;
 let started = false;
+// an 'open' asked for while the bridge was unreachable; dropped if it's stale, so
+// Chrome doesn't pop up long after you clicked
+let pendingOpenAt = 0;
 let toastId = 0;
 
 // A short two-note chime, synthesized so there's no sound file to ship.
@@ -87,7 +95,7 @@ function chime() {
 
 export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
   link: 'connecting',
-  chrome: true,
+  chrome: false,
   rooms: [],
   lines: [],
   frames: {},
@@ -96,6 +104,7 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
   unread: 0,
   prefs: loadPrefs(),
   focusRoom: null,
+  liveRequest: 0,
 
   connect: () => {
     if (started) return;
@@ -106,11 +115,16 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
     const open = () => {
       set({ link: 'connecting' });
       ws = new WebSocket(STUMBLE_BRIDGE_URL);
-      ws.onopen = () => { retry = 0; set({ link: 'online', error: null, chrome: true }); };
+      ws.onopen = () => {
+        retry = 0;
+        set({ link: 'online', error: null });
+        if (Date.now() - pendingOpenAt < 30_000) get().send({ type: 'start' });
+        pendingOpenAt = 0;
+      };
       ws.onmessage = (e) => {
         const m = parseBridgeMessage(String(e.data));
         if (!m) return;
-        if (m.type === 'hello') set({ rooms: m.rooms, lines: appendLines([], m.history) });
+        if (m.type === 'hello') set({ chrome: m.chrome, rooms: m.rooms, lines: appendLines([], m.history) });
         else if (m.type === 'rooms') set({ rooms: m.rooms });
         else if (m.type === 'frame') set((s) => ({ frames: { ...s.frames, [`${m.room}/${m.handle}`]: m.data } }));
         else if (m.type === 'status') set({ chrome: m.chrome });
@@ -137,6 +151,11 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
   },
 
   send: (msg) => { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); },
+  openChrome: () => {
+    get().connect();
+    if (ws?.readyState === WebSocket.OPEN) get().send({ type: 'start' });
+    else pendingOpenAt = Date.now();
+  },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   clearUnread: () => set({ unread: 0 }),
   setPrefs: (p) => {
@@ -144,5 +163,6 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
     set({ prefs });
     try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* storage off */ }
   },
-  setFocusRoom: (focusRoom) => set({ focusRoom })
+  setFocusRoom: (focusRoom) => set({ focusRoom }),
+  showLive: (room) => set((st) => ({ focusRoom: room ?? st.focusRoom, liveRequest: st.liveRequest + 1 }))
 }));

@@ -47,7 +47,8 @@ thanatos update                     pull, rebuild, restart the desktop (and the 
 thanatos lang list                  language plugins and install state
 thanatos lang install <name|all>    node python rust go c vita reaper
 thanatos web start|stop|status|open Lilly desktop on localhost:4173
-thanatos stumble start|stop|status  keep StumbleChat rooms open for Stumble Live
+thanatos stumble install            StumbleChat bridge as a background service
+thanatos stumble start|stop|status  open/close its Chrome window, check on it
 thanatos new <kind> <name>          scaffold a project with git + a passing test
 thanatos log "what I learned"       append to ~/.local/share/thanatos/journal.md
 thanatos review [days]              read back recent entries
@@ -73,7 +74,7 @@ thanatos learn reaper               Reaper's Necronomicon learning system
 
 ## Stumble Live
 
-Shows live chat and cams from your StumbleChat rooms in a desktop window. To start it, run `thanatos stumble start` and sign in to StumbleChat in the Chrome window that opens, then open **Stumble Live** from the start menu.
+Shows live chat and cams from your StumbleChat rooms in a desktop window. Open **StumbleChat** on the desktop and the bridge's Chrome window opens for you to sign in. Then use **Stumble Live** from the start menu.
 
 The bridge's Chrome keeps your rooms open even when the widget is closed. See [stumble-bridge/README.md](stumble-bridge/README.md).
 
