@@ -31,7 +31,6 @@ import {
   DoorOpen,
   Eraser,
   ExternalLink,
-  Eye,
   File,
   FilePlus2,
   Film,
@@ -74,9 +73,12 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { nanoid } from 'nanoid';
-import { appCategories, appRegistry, type AppCategory, type ThanatosApp } from './apps';
+import { appRegistry, type AppCategory, type ThanatosApp } from './apps';
 import LillyClock from './components/LillyClock';
 import DesktopPets from './components/DesktopPets';
+import AppearanceSettings, { type AppearanceSection } from './components/AppearanceSettings';
+import CustomBackground from './components/CustomBackground';
+import { appearanceVars, useAppearance } from './lib/appearance';
 import StumbleLive from './components/StumbleLive';
 import { StumbleToasts, StumbleTrayButton, StumbleWidget } from './components/StumbleWidget';
 import { parseRotvicePets, useRotvicePets } from './lib/rotvice-pets';
@@ -1029,43 +1031,41 @@ function ClockApp() {
   return <LillyClock />;
 }
 
+const BUILT_IN_THEMES: { id: ThanatosTheme; label: string; swatch: [string, string] }[] = [
+  { id: 'lilly', label: 'Lilly', swatch: ['#ff2360', '#8e1cff'] },
+  { id: 'lilly-garden', label: "Lilly's Garden", swatch: ['#7cff76', '#ff8722'] },
+  { id: 'death', label: 'Death', swatch: ['#ff122a', '#780012'] },
+  { id: 'zombitious', label: 'zomBitious', swatch: ['#78ff78', '#ff2252'] }
+];
+
+const SETTINGS_TABS: { id: AppearanceSection | 'system'; label: string }[] = [
+  { id: 'theme', label: 'Theme' },
+  { id: 'background', label: 'Background' },
+  { id: 'colours', label: 'Colours' },
+  { id: 'effects', label: 'Effects' },
+  { id: 'system', label: 'System' }
+];
+
 function SettingsApp({ theme, onThemeChange }: { theme: ThanatosTheme; onThemeChange: (t: ThanatosTheme) => void }) {
-  const [crt, setCrt] = useState(true);
-  const [vol, setVol] = useState(85);
+  const [tab, setTab] = useState<AppearanceSection | 'system'>('theme');
   return (
-    <div className="settings-grid">
-      <section className="theme-section">
-        <h3>Theme</h3>
-        <div className="theme-options">
-          {(['lilly','lilly-garden','death','zombitious'] as ThanatosTheme[]).map((t) => (
-            <button key={t} type="button" className={theme === t ? 'selected' : ''} onClick={() => onThemeChange(t)}>
-              {t === 'lilly' ? 'Lilly' : t === 'lilly-garden' ? "Lilly's Garden" : t === 'death' ? 'Death' : 'zomBitious'}
-            </button>
-          ))}
-        </div>
-        <p>
-          {theme === 'death'
-            ? 'Reaper active.'
-            : theme === 'zombitious'
-              ? 'zomBitious active.'
-              : theme === 'lilly-garden'
-                ? "Lilly's Garden active."
-                : 'Lilly active.'}
-        </p>
-      </section>
-      <section>
-        <h3>Blood Intensity</h3>
-        <input type="range" min="0" max="100" value={vol} onChange={(e) => setVol(Number(e.target.value))} />
-        <p>{vol}% crimson</p>
-      </section>
-      <section>
-        <h3>CRT Veil</h3>
-        <button type="button" onClick={() => setCrt((v) => !v)}><Eye size={15} /> {crt ? 'Enabled' : 'Disabled'}</button>
-      </section>
-      <section>
-        <h3>Remote Control</h3>
-        <p>Developer → Remote Control to pair via bridge daemon over Tailscale.</p>
-      </section>
+    <div className="settings-app">
+      <nav className="settings-sidebar" aria-label="Settings sections">
+        {SETTINGS_TABS.map((t) => (
+          <button key={t.id} type="button" className={clsx('settings-nav-item', tab === t.id && 'active')} onClick={() => setTab(t.id)}>{t.label}</button>
+        ))}
+      </nav>
+      <div className="settings-content">
+        {tab === 'system' ? (
+          <section className="settings-note">
+            <h3>Remote Control</h3>
+            <p>Developer → Remote Control to pair via bridge daemon over Tailscale.</p>
+          </section>
+        ) : (
+          <AppearanceSettings section={tab} theme={theme} themes={BUILT_IN_THEMES}
+            onThemeChange={(t) => { const found = BUILT_IN_THEMES.find((b) => b.id === t); if (found) onThemeChange(found.id); }} />
+        )}
+      </div>
     </div>
   );
 }
@@ -2687,6 +2687,8 @@ export function ThanatosDesktop() {
     return s === 'death' || s === 'zombitious' || s === 'lilly' || s === 'lilly-garden' ? s : 'lilly';
   });
   const handleBootDone = useCallback(() => setBooted(true), []);
+  const look = useAppearance((st) => st.appearance);
+  const fx = look.effects;
   useEffect(() => { const i = window.setInterval(() => setClock(new Date()), 1000); return () => window.clearInterval(i); }, []);
   const changeTheme = useCallback((t: ThanatosTheme) => { setTheme(t); localStorage.setItem('thanatos.theme', t); }, []);
   const topZ = windows.reduce((m, w) => Math.max(m, w.z), 10);
@@ -2732,17 +2734,22 @@ export function ThanatosDesktop() {
   }));
 
   return (
-    <main className={`desktop-shell theme-${theme}`}>
+    <main className={`desktop-shell theme-${theme}`} style={appearanceVars(look) as CSSProperties}>
       {!booted ? <BootLayer onDone={handleBootDone} /> : null}
       <div className="desktop-wallpaper" />
-      <div className="sprite-background" aria-hidden="true" />
-      <BloodDrips />
-      <div className="blood-rain" />
-      <div className="crt-overlay" />
-      <div className="audio-curse" aria-hidden="true" />
-      {booted ? <QuoteFlash /> : null}
-      <SkullFlash />
-      <div className="death-brand"><Skull size={38} /><span>THANATOS</span></div>
+      {fx.sprite && look.background.kind === 'theme' ? <div className="sprite-background" aria-hidden="true" /> : null}
+      <CustomBackground />
+      <div className="fx-layer" aria-hidden="true">
+        {fx.bloodDrips ? <BloodDrips /> : null}
+        {fx.bloodRain ? <div className="blood-rain" /> : null}
+        {fx.crt ? <div className="crt-overlay" /> : null}
+        {fx.audioCurse ? <div className="audio-curse" /> : null}
+        {fx.skulls ? <SkullFlash /> : null}
+        {fx.vignette ? <div className="fx-vignette" /> : null}
+        {fx.grain ? <div className="fx-grain" /> : null}
+      </div>
+      {booted && fx.quotes ? <QuoteFlash /> : null}
+      {fx.brand ? <div className="death-brand"><Skull size={38} /><span>THANATOS</span></div> : null}
       <div className="window-layer">
         {windows.map((w) => (
           <DesktopWindow key={w.id} openWindow={w} openWindows={windows} theme={theme} session={session} onSessionChange={setSession} onThemeChange={changeTheme} active={w.id === activeId}

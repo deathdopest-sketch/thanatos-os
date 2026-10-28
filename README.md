@@ -50,6 +50,16 @@ The widget appears on its own. For the full view, open **Stumble Live** from the
 
 Role-based mod tools are next: automod actions and autobans for owners and super mods, and a basic toolkit for mods.
 
+## Make it yours
+
+Open **Settings** to change how Thanatos looks:
+
+- **Theme:** four built-in themes, Lilly, Lilly's Garden, Death and zomBitious. Each recolours the whole desktop.
+- **Background:** use your own **picture, GIF or video** (uploads up to 150 MB, kept on your device), or paste a link to one. You can fill the screen, show it whole or tile it, and darken or blur it so windows stay readable. Videos play muted on a loop.
+- **Colours:** pick your own main colour, second colour, text and background. The main colour drives every border, glow and highlight.
+- **Effects:** turn blood drips, blood rain, CRT scanlines, skull and quote flashes, the audio pulse, the theme art and the watermark on or off. You can also add a vignette or film grain, and set how strong the effects are.
+- **Your themes:** save your background, colours and effects as a named look, and switch between looks in one click.
+
 ## Everything else on the desktop
 
 Thanatos is a full desktop in your browser, with windows, a start menu and a taskbar. It ships with 60 apps:
@@ -146,6 +156,17 @@ thanatos stumble start
 
 The bridge reopens the rooms you had open last time.
 
+### Step 6: Make it yours (optional)
+
+Open **Settings** from the start menu:
+
+1. **Background:** click **Add picture, GIF or video** and pick a file, or paste a link and click **Use link**. Use **Darken** and **Blur** if windows get hard to read.
+2. **Colours:** click a colour square to pick your own. The ↺ button puts that colour back to the theme's default.
+3. **Effects:** tick what you want on, and drag **Effect strength** to tone everything down.
+4. **Theme:** type a name and click **Save as theme** to keep this look. It then appears under **Your themes**.
+
+If you don't like the result, **Theme → Reset look to defaults** puts everything back. Your uploads and saved themes are kept.
+
 ### Updating
 
 ```bash
@@ -204,6 +225,9 @@ The bridge's Chrome window was closed, and closing it stops the bridge. Run `tha
 - Browsers only play sound after you've clicked somewhere on the page, so click anywhere on the desktop once.
 - Check that the widget's speaker icon isn't muted.
 - Mentions are spotted by your room nick, or by the username you saved in the StumbleChat app's Settings.
+
+**My background video is choppy or the desktop feels slow**
+Large videos are heavy for a Chromebook. Use a shorter or smaller clip (720p is plenty), turn on some **Blur**, or switch off effects like **Film grain** and **Blood rain** under Settings → Effects.
 
 **Chat shows up but the Cams list is empty**
 Run `thanatos stumble log` and send the output along with an issue. StumbleChat may have changed its page.
