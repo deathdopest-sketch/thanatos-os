@@ -12,7 +12,7 @@ const { WebSocketServer } = WS;
 const { Bridge } = require('../bridge');
 
 const ROOM_PAGE = `<!doctype html><html><body><div id="videos"></div><script>
-  const ws = new WS('ws://' + location.host + '/ws');
+  const ws = new WebSocket('ws://' + location.host + '/ws');
   const c = document.createElement('canvas'); c.width = 160; c.height = 120;
   const g = c.getContext('2d'); let t = 0;
   setInterval(() => { g.fillStyle = 'hsl(' + (t++ * 20 % 360) + ',80%,50%)'; g.fillRect(0, 0, 160, 120); }, 50);

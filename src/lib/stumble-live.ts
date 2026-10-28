@@ -7,7 +7,7 @@ const MAX_LINES = 600;
 
 export type StumbleLine = { room: string; kind: 'chat' | 'self' | 'system'; nick: string | null; text: string; ts: number };
 export type StumbleCam = { handle: string; nick: string | null };
-export type StumbleLiveRoom = { room: string; connected: boolean; reopening: boolean; cams: StumbleCam[]; watching: string[] };
+export type StumbleLiveRoom = { room: string; self: string | null; connected: boolean; reopening: boolean; cams: StumbleCam[]; watching: string[] };
 
 export type BridgeMessage =
   | { type: 'hello'; rooms: StumbleLiveRoom[]; history: StumbleLine[] }
@@ -41,7 +41,7 @@ function parseRooms(v: unknown): StumbleLiveRoom[] {
         })
       : [];
     const watching = Array.isArray(r.watching) ? r.watching.map(String) : [];
-    return [{ room, connected: r.connected === true, reopening: r.reopening === true, cams, watching }];
+    return [{ room, self: str(r.self), connected: r.connected === true, reopening: r.reopening === true, cams, watching }];
   });
 }
 
@@ -72,4 +72,16 @@ export function parseBridgeMessage(raw: string): BridgeMessage | null {
 export function appendLines(lines: StumbleLine[], more: StumbleLine[]) {
   const next = lines.concat(more);
   return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** True when someone else's chat line names you: "nick", "@nick", any case, as a whole word. */
+export function isMention(line: StumbleLine, nicks: (string | null | undefined)[]) {
+  if (line.kind !== 'chat') return false;
+  return nicks.some((nick) => {
+    const n = nick?.trim();
+    if (!n || n.length < 2 || line.nick?.toLowerCase() === n.toLowerCase()) return false;
+    return new RegExp(`(^|[^\\w])@?${escapeRe(n)}(?![\\w])`, 'i').test(line.text);
+  });
 }

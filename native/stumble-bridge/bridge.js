@@ -189,7 +189,6 @@ class Bridge {
   scheduleReopen(room, entry, why) {
     if (entry.reopenTimer || this.rooms.get(room) !== entry) return;
     log(room, `${why}; reopening in ${Math.round(this.config.reopenDelayMs / 1000)}s`);
-    this.broadcastRooms();
     entry.reopenTimer = setTimeout(async () => {
       entry.reopenTimer = null;
       if (this.rooms.get(room) !== entry) return;
@@ -203,6 +202,7 @@ class Bridge {
         this.broadcastRooms();
       }
     }, this.config.reopenDelayMs);
+    this.broadcastRooms(); // after the timer is set, so the desktop sees "reopening"
   }
 
   async closeRoom(room) {
@@ -248,6 +248,7 @@ class Bridge {
   summary() {
     return [...this.rooms.entries()].map(([room, e]) => ({
       room,
+      self: e.state.selfHandle ? e.state.nickFor(e.state.selfHandle) : null, // your nick, for mentions
       connected: e.socketIds.size > 0 && !e.state.closed,
       reopening: !!e.reopenTimer,
       cams: e.cams,

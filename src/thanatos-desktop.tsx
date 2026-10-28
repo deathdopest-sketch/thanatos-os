@@ -78,6 +78,7 @@ import { appCategories, appRegistry, type AppCategory, type ThanatosApp } from '
 import LillyClock from './components/LillyClock';
 import DesktopPets from './components/DesktopPets';
 import StumbleLive from './components/StumbleLive';
+import { StumbleToasts, StumbleTrayButton, StumbleWidget } from './components/StumbleWidget';
 import { parseRotvicePets, useRotvicePets } from './lib/rotvice-pets';
 import { normalizePath } from './lib/vfs';
 import { useVfsListing } from './lib/use-vfs-listing';
@@ -2718,6 +2719,11 @@ export function ThanatosDesktop() {
     setStartOpen(false);
   };
 
+  const openStumbleLive = () => {
+    const app = appRegistry.find((a) => a.id === 'stumblelive');
+    if (app) launch(app);
+  };
+
   const patch = (id: string, p: Partial<OpenWindow>) => setWindows((ws) => ws.map((w) => {
     if (w.id !== id) return w;
     const next = { ...w, ...p };
@@ -2749,6 +2755,8 @@ export function ThanatosDesktop() {
         ))}
       </div>
       {booted ? <DesktopPets visible={windows.some((w) => w.app.id === 'rotvice')} /> : null}
+      {booted ? <StumbleWidget onOpen={openStumbleLive} /> : null}
+      {booted ? <StumbleToasts onOpen={openStumbleLive} /> : null}
       <AnimatePresence>{startOpen ? <StartMenu onLaunch={launch} /> : null}</AnimatePresence>
       <nav className="taskbar">
         <button type="button" className={clsx('tb-start', startOpen && 'open')} onClick={() => setStartOpen((v) => !v)}>
@@ -2769,6 +2777,7 @@ export function ThanatosDesktop() {
           ))}
         </div>
         <div className="tb-tray">
+          <StumbleTrayButton />
           <ShieldCheck size={14} />
           <div className="tb-clock">
             <span className="tb-clock-time">{clock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

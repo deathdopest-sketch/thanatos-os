@@ -4821,6 +4821,193 @@ body {
   .stumble-join { margin-left: 0; }
 }
 
+/* Stumble Live: desktop widget, mention toasts, taskbar icon */
+.stumble-line.mention {
+  margin: 1px -6px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(255, 0, 50, 0.18);
+  box-shadow: inset 2px 0 0 #ff315e;
+}
+
+.stumble-widget {
+  position: fixed;
+  z-index: 5400; /* above windows (500), below pets (5500) and the taskbar (6000) */
+  display: flex;
+  flex-direction: column;
+  max-height: min(460px, calc(100vh - 140px));
+  border: 1px solid rgba(255, 47, 88, 0.42);
+  border-radius: 9px;
+  background: rgba(6, 2, 5, 0.9);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 22px rgba(255, 0, 50, 0.16);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+
+.stumble-widget header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px 7px 10px;
+  border-bottom: 1px solid rgba(255, 47, 88, 0.22);
+  background: linear-gradient(180deg, rgba(100, 0, 18, 0.5), rgba(18, 5, 7, 0.6));
+  color: #ff315e;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.stumble-widget header strong { color: #fff4ec; font-size: 0.88rem; }
+
+.stumble-widget header select {
+  max-width: 130px;
+  border: 1px solid rgba(255, 47, 88, 0.28);
+  border-radius: 6px;
+  background: rgba(18, 5, 7, 0.9);
+  color: #fff4ec;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.stumble-widget-spacer { flex: 1; }
+
+.stumble-widget header button,
+.stumble-widget-empty button,
+.stumble-toast button {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff4ec;
+  cursor: pointer;
+}
+
+.stumble-widget header button:hover,
+.stumble-toast button:hover { border-color: rgba(255, 47, 88, 0.4); background: rgba(255, 0, 50, 0.12); }
+
+.stumble-widget-cams {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 47, 88, 0.16);
+}
+
+.stumble-widget-cams img {
+  width: 96px;
+  height: 72px;
+  flex: none;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.stumble-widget .stumble-feed {
+  height: 230px;
+  min-height: 0;
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.84rem;
+}
+
+.stumble-widget-empty { padding: 14px; }
+.stumble-widget-empty button { display: inline; width: auto; padding: 0 4px; color: #ff7aa0; text-decoration: underline; }
+
+.stumble-widget-pill {
+  position: fixed;
+  z-index: 5400;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 47, 88, 0.5);
+  border-radius: 17px;
+  background: rgba(6, 2, 5, 0.9);
+  box-shadow: 0 0 18px rgba(255, 0, 50, 0.2);
+  color: #fff4ec;
+  font: inherit;
+  cursor: pointer;
+}
+
+.stumble-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #ff315e;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.stumble-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 68px; /* just above the taskbar, like desktop notifications */
+  z-index: 7600; /* above windows, widget and start menu */
+  display: grid;
+  gap: 8px;
+  width: min(340px, calc(100vw - 32px));
+}
+
+.stumble-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgba(255, 49, 94, 0.7);
+  border-radius: 9px;
+  background: rgba(20, 3, 8, 0.96);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 24px rgba(255, 0, 50, 0.3);
+  animation: stumble-toast-in 0.22s ease-out;
+}
+
+.stumble-toast .stumble-toast-body {
+  display: flex;
+  flex: 1;
+  height: auto;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 2px;
+  color: #ff315e;
+  text-align: left;
+}
+
+.stumble-toast-body span { display: grid; gap: 2px; color: #fff4ec; font-size: 0.88rem; overflow-wrap: anywhere; }
+.stumble-toast-body small { color: #c7a45e; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }
+
+@keyframes stumble-toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.tb-stumble {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tb-stumble.live { color: #5effa4; }
+.tb-stumble .stumble-badge { position: absolute; top: -7px; right: -9px; min-width: 15px; height: 15px; font-size: 0.62rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stumble-toast { animation: none; }
+}
+
 /* ─── RotVice pets on the desktop ─── */
 .desktop-pets {
   position: fixed;
