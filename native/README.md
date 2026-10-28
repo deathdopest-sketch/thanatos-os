@@ -46,6 +46,7 @@ thanatos doctor                     check toolchains and setup
 thanatos lang list                  language plugins and install state
 thanatos lang install <name|all>    node python rust go c vita reaper
 thanatos web start|stop|status|open Lilly desktop on localhost:4173
+thanatos stumble start|stop|status  keep StumbleChat rooms open for Stumble Live
 thanatos new <kind> <name>          scaffold a project with git + a passing test
 thanatos log "what I learned"       append to ~/.local/share/thanatos/journal.md
 thanatos review [days]              read back recent entries
@@ -68,6 +69,12 @@ thanatos learn reaper               Reaper's Necronomicon learning system
 - `thanatos lang install vita` (or `reaper`) again pulls the latest commit.
 - To pin a branch, set `VITA_REF=<branch>` or `REAPER_REF=<branch>` before installing.
 - Starter projects: `thanatos new vita my-organism` and `thanatos new reaper my-ritual`.
+
+## Stumble Live
+
+Shows live chat and cams from your StumbleChat rooms in a desktop window. To start it, run `thanatos stumble start` and sign in to StumbleChat in the Chrome window that opens, then open **Stumble Live** from the start menu.
+
+The bridge's Chrome keeps your rooms open even when the widget is closed. See [stumble-bridge/README.md](stumble-bridge/README.md).
 
 ## Arch + Hyprland track
 

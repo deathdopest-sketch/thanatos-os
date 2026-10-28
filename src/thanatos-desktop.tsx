@@ -77,6 +77,7 @@ import { nanoid } from 'nanoid';
 import { appCategories, appRegistry, type AppCategory, type ThanatosApp } from './apps';
 import LillyClock from './components/LillyClock';
 import DesktopPets from './components/DesktopPets';
+import StumbleLive from './components/StumbleLive';
 import { parseRotvicePets, useRotvicePets } from './lib/rotvice-pets';
 import { normalizePath } from './lib/vfs';
 import { useVfsListing } from './lib/use-vfs-listing';
@@ -2470,6 +2471,7 @@ function AppContent({ app, openWindows, theme, session, onSessionChange, onTheme
     case 'mail': return <MailApp />;
     case 'rotvice': return <RotViceApp />;
     case 'stumblechat': return <StumbleChatApp />;
+    case 'stumblelive': return <StumbleLive savedRooms={loadStumbleSettings().rooms.map((r) => r.slug)} />;
     case 'chatcommon': return <ChatCommonApp />;
     case 'settings': return <SettingsApp theme={theme} onThemeChange={onThemeChange} />;
     case 'tasks': return <TaskManagerApp openWindows={openWindows} />;

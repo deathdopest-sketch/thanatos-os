@@ -1,0 +1,18 @@
+{
+  "name": "thanatos-stumble-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Keeps StumbleChat rooms open in a real Chrome window and streams their chat and selected cams to the Thanatos desktop.",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "puppeteer": "^24.22.3",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "ws": "^8.18.0"
+  }
+}
