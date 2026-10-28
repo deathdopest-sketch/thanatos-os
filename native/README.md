@@ -43,6 +43,7 @@ The installer is safe to re-run. It backs up any existing dotfile as `<file>.pre
 
 ```text
 thanatos doctor                     check toolchains and setup
+thanatos update                     pull, rebuild, restart the desktop (and the bridge if running)
 thanatos lang list                  language plugins and install state
 thanatos lang install <name|all>    node python rust go c vita reaper
 thanatos web start|stop|status|open Lilly desktop on localhost:4173
