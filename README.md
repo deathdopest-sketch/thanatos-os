@@ -1,37 +1,35 @@
 # Thanatos OS
 
-**A desktop built for people who live in chat rooms.**
+**StumbleChat kicks you for looking away. Thanatos keeps you in the room.**
 
-Webcam chat sites are built for one tab and your full attention. Background a room for a few minutes and you're dropped. Use two rooms and you're juggling windows. Moderating means staring at the tab, because none of these sites offer an API, a multi-room view, or decent mod tools. Ask for any of that and you won't get an answer.
+StumbleChat, like most webcam chat sites, assumes you have nothing else open. Minimize the window and you're gone. Want two rooms? That's two full-screen tabs and constant switching. Moderating means staring at chat, because the site gives you no API, no multi-room view and no real mod tooling. They aren't going to fix it, so this does.
 
-Thanatos OS works around all of it. It's a Chromebook-first desktop that keeps your rooms connected, puts their chat and cams in one place, and gives your other tools (editor, terminal, git, API client) the same screen.
+Thanatos OS is a Chromebook-first desktop that keeps your rooms connected, puts their chat and cams in one place, and gives your other tools (editor, terminal, git, API client) the same screen.
 
 ---
 
-## The problem
+## The problem, plainly
 
-Chat sites like StumbleChat keep you in a room only while your tab answers their pings. Browsers deliberately slow down tabs you aren't looking at, and on a Chromebook that's every tab but one. So:
+StumbleChat holds your seat in a room only while your tab keeps answering its pings. Browsers deliberately slow down tabs you aren't looking at. Put those two together and you get the experience every regular knows:
 
-- **You get dropped from rooms you didn't leave.** Minimize the window, switch tabs, let the screen dim, and you're out.
-- **You can't watch more than one room.** Every room is a full-screen tab that wants your attention.
-- **Cams are all or nothing.** You get the site's grid, at the site's size, or nothing.
-- **There's no supported way to build on top.** No API, no webhooks. Bot protection punishes anything that isn't a real browser with a real person signed in.
+- **Dropped for alt-tabbing.** You didn't leave. The browser put your tab to sleep and the site treated that as you leaving.
+- **One room at a time.** The site is built for a single full-screen tab. Running three rooms means juggling three windows.
+- **Cams on the site's terms.** You get their grid, at their size, or nothing.
+- **No way to build on it.** No API, no webhooks, and anti-bot checks that punish anything that isn't a person in a real browser. So every mod tool ends up being a fragile browser extension that breaks on the next update.
 
-## The solution
+## The fix
 
-### Stumble Live: rooms that stay connected
+### Stumble Live
 
-A small local bridge runs a real Chrome window on your machine, with background throttling turned off.
+Thanatos stops fighting the site and goes along with it. It runs a **real Chrome, signed in as you, by you**, with throttling switched off, so your rooms never fall asleep. The pings get answered, so you stay in the room. If the site closes a room anyway, the bridge rejoins it. Stop the bridge and start it tomorrow, and it reopens the same rooms.
 
-- **One tab per room, always awake.** The site's pings are always answered, so you stay in the room whether or not you're looking at it.
-- **Rooms come back on their own.** If the site closes a room or the connection drops, the bridge rejoins it. Your open rooms are saved and reopened on the next start.
-- **A real browser with your real login.** You sign in to StumbleChat yourself, in that Chrome window. Thanatos never sees your password, and to the site you look like any other person in a browser, because that's what you are.
+Your rooms then feed into **Stumble Live** on the desktop:
 
-The **Stumble Live** window on the desktop shows the result:
+- **Every room's chat**, with a tab and a status light per room.
+- **The cams you choose.** Tick up to 12 people and their cams show next to the chat, at a frame rate a Chromebook can handle.
+- **History that survives.** Close the window and you're still in the rooms. Open it again and the last 300 lines are waiting.
 
-- **Live chat** for every room you're in, with a tab per room and a status light.
-- **Cams you choose.** Tick the people you want to watch, up to 12 at once, and their cams show next to the chat at a low frame rate a Chromebook can handle.
-- **History that survives.** Close the window and the bridge stays in your rooms. Reopen it and the last 300 lines of each room are still there.
+No scraping your password, no fake clients, no bot accounts. To StumbleChat you're one person in one browser, which is exactly what you are. The only difference is that your browser stops falling asleep.
 
 ```bash
 thanatos stumble start   # opens the bridge's Chrome window; sign in once
