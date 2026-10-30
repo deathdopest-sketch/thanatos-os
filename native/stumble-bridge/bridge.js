@@ -233,18 +233,21 @@ class Bridge {
     });
 
     page.on('close', () => {
-      // You closed the tab yourself: stop tracking that room. Wait a moment first,
+      // You closed the tab yourself: stop tracking that room. Wait a few seconds first,
       // because closing the whole Chrome window closes every tab too, and that
-      // shouldn't wipe your saved rooms.
-      setTimeout(() => {
+      // shouldn't wipe your saved rooms. Chrome can be slow to disconnect, so also
+      // check whether any tabs are left: none means the whole window is closing.
+      setTimeout(async () => {
         if (!this.chromeOpen) return;
+        const open = await this.browser.pages().catch(() => []);
+        if (!this.chromeOpen || open.length === 0) return;
         if (this.rooms.get(room) === entry && entry.page === page && !entry.reopening) {
           clearTimeout(entry.reopenTimer);
           this.rooms.delete(room);
           this.saveRooms();
           this.broadcastRooms();
         }
-      }, 500);
+      }, 3000);
     });
 
     await page.goto(`${this.config.stumbleUrl}/room/${encodeURIComponent(room)}`, { waitUntil: 'domcontentloaded', timeout: 45000 })
