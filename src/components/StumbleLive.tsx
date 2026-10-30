@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Radio, Video, VideoOff, X } from 'lucide-react';
+import { Plus, Radio, Send, Video, VideoOff, X } from 'lucide-react';
 import clsx from 'clsx';
 import { MAX_WATCHED_CAMS, isMention, type StumbleLine } from '../lib/stumble-live';
 import { useStumbleLive } from '../lib/stumble-live-store';
@@ -10,6 +10,7 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
   const { link, chrome, rooms, lines, frames, error, send, focusRoom, setFocusRoom, clearUnread, openChrome } = useStumbleLive();
   const [active, setActive] = useState<string | null>(focusRoom);
   const [joinInput, setJoinInput] = useState('');
+  const [reply, setReply] = useState('');
 
   // opening this app opens StumbleChat in the bridge's Chrome window (sign in there)
   useEffect(() => { useStumbleLive.getState().openChrome(); clearUnread(); }, [clearUnread]);
@@ -32,6 +33,13 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
     send({ type: 'join', room: slug });
     setActive(slug);
     setJoinInput('');
+  };
+
+  const sendReply = () => {
+    const text = reply.trim();
+    if (!text || !room?.connected) return;
+    send({ type: 'say', room: room.room, text });
+    setReply('');
   };
 
   const toggleCam = (handle: string) => {
@@ -105,6 +113,17 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
               </div>
             ) : null}
             <ChatFeed lines={roomLines} self={room.self} />
+            <form className="stumble-reply" onSubmit={(e) => { e.preventDefault(); sendReply(); }}>
+              <input
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                maxLength={1000}
+                disabled={!room.connected}
+                placeholder={room.connected ? `Message ${room.room} as ${room.self ?? 'you'}…` : 'Waiting for the room to connect…'}
+                aria-label={`Message ${room.room}`}
+              />
+              <button type="submit" disabled={!room.connected || !reply.trim()}><Send size={15} /> Send</button>
+            </form>
           </div>
           <aside className="chat-stats stumble-side">
             <h3>Cams</h3>

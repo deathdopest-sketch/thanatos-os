@@ -28,7 +28,7 @@ thanatos stumble status
 thanatos stumble log
 ```
 
-The widget only reads chat. To type, use the room's tab in the bridge's Chrome window.
+Stumble Live has a reply box that types into the room's own chat box. The widget on the desktop only reads chat.
 
 If StumbleChat closes the room or the connection drops, the bridge reopens the room after 30 seconds. If you close a room's tab yourself, the bridge leaves that room.
 

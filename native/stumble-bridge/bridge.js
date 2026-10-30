@@ -292,6 +292,18 @@ class Bridge {
     this.broadcastRooms();
   }
 
+  /** Type a message into the room's own chat box and send it, as you would. */
+  async say(room, text) {
+    const entry = this.rooms.get(room);
+    const line = String(text).replace(/\s+/g, ' ').trim().slice(0, 1000);
+    if (!entry?.page || !line) return;
+    const box = await entry.page.$('textarea#textarea');
+    if (!box) throw new Error(`${room}: the chat box isn't on the page yet`);
+    await box.click();
+    await box.type(line);
+    await entry.page.keyboard.press('Enter');
+  }
+
   async pushWatch(entry) {
     await entry.page?.evaluate((list) => { window.__thanatosWatch = list; }, [...entry.watch]).catch(() => {});
   }
@@ -340,6 +352,7 @@ class Bridge {
       else if (msg.type === 'stop') await this.stopChrome();
       else if (msg.type === 'join' && typeof msg.room === 'string') await this.openRoom(msg.room.trim());
       else if (msg.type === 'leave' && typeof msg.room === 'string') await this.closeRoom(msg.room);
+      else if (msg.type === 'say' && typeof msg.room === 'string' && typeof msg.text === 'string') await this.say(msg.room, msg.text);
       else if (msg.type === 'watch' && typeof msg.room === 'string') await this.setWatch(msg.room, msg.handles);
     } catch (e) {
       ws.send(JSON.stringify({ type: 'error', message: e.message }));

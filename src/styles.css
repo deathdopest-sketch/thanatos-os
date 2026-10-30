@@ -4733,6 +4733,20 @@ body {
   font: inherit;
 }
 
+.stumble-reply { display: flex; gap: 6px; }
+
+.stumble-reply input {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(var(--curse-primary), 0.28);
+  border-radius: 7px;
+  background: rgba(18, 5, 7, 0.82);
+  color: rgb(var(--ui-text));
+  font: inherit;
+}
+
 .stumble-warn { color: #ff9db3; }
 .stumble-live code, .chat-launch code { font-family: 'JetBrains Mono', monospace; color: rgb(var(--ui-text)); }
 
