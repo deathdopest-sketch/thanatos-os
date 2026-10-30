@@ -47,6 +47,7 @@ thanatos update                     pull, rebuild, restart the desktop (and the 
 thanatos lang list                  language plugins and install state
 thanatos lang install <name|all>    node python rust go c vita reaper
 thanatos web start|stop|status|open Lilly desktop on localhost:4173
+thanatos shell install|status|restart  real shell for the desktop's Terminal app
 thanatos stumble install            StumbleChat bridge as a background service
 thanatos stumble start|stop|status  open/close its Chrome window, check on it
 thanatos new <kind> <name>          scaffold a project with git + a passing test

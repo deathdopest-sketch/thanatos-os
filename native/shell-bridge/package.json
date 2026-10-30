@@ -1,0 +1,17 @@
+{
+  "name": "thanatos-shell-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Real terminal sessions for the Thanatos desktop's Terminal app, over a localhost WebSocket.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

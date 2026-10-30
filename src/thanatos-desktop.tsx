@@ -64,6 +64,7 @@ import {
   ShieldCheck,
   Shuffle,
   Skull,
+  TerminalSquare,
   Square,
   Trash2,
   Wand2,
@@ -82,6 +83,8 @@ import { appearanceVars, useAppearance } from './lib/appearance';
 import StumbleLive from './components/StumbleLive';
 import { StumbleToasts, StumbleTrayButton, StumbleWidget } from './components/StumbleWidget';
 import { useStumbleLive } from './lib/stumble-live-store';
+import { useDesktopBus } from './lib/desktop-bus';
+import ShellTerminal from './components/ShellTerminal';
 import { parseRotvicePets, useRotvicePets } from './lib/rotvice-pets';
 import { normalizePath } from './lib/vfs';
 import { useVfsListing } from './lib/use-vfs-listing';
@@ -179,7 +182,7 @@ declare global {
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
-const PUBLIC_CMDS = ['help', 'status', 'apps', 'date', 'skull', 'clear', 'ls', 'whoami', 'uname'];
+const PUBLIC_CMDS = ['help', 'open <app>', 'thanatos stumble start|stop|status', 'status', 'apps', 'date', 'skull', 'clear', 'ls', 'whoami', 'uname'];
 
 const QUOTES = [
   'EVERY PROCESS ENDS.', 'THE KERNEL REMEMBERS THE DEAD.', 'ALL WINDOWS CLOSE EVENTUALLY.',
@@ -607,43 +610,6 @@ async function writeMusicTracks(tracks: MusicTrack[]) {
 
 // ─── system apps ──────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function LegacyTerminalApp({ openWindows }: { openWindows: OpenWindow[] }) {
-  const [lines, setLines] = useState<string[]>(['thanatos@crypt:~$ status', 'death kernel awake', 'vfs: indexeddb', 'remote bridge: offline', '', 'type "help" for commands']);
-  const [input, setInput] = useState('');
-  const outRef = useRef<HTMLDivElement>(null);
-
-  const run = () => {
-    const cmd = input.trim();
-    if (!cmd) return;
-    if (cmd === 'clear') { setLines([]); setInput(''); return; }
-    const out: Record<string, string[]> = {
-      help: [`commands: ${PUBLIC_CMDS.join(', ')}`],
-      status: ['kernel: THANATOS v2.0', `windows: ${openWindows.length}`, 'vfs: indexeddb persistent', 'remote: offline', 'theme: death'],
-      apps: appRegistry.slice(0, 20).map((a) => `${a.id.padEnd(18)} ${a.name}`),
-      date: [new Date().toString()],
-      skull: ['☠ skull pulse armed'],
-      ls: ['/home/death  /vault  /tmp  /dev/null'],
-      whoami: ['root — always root here'],
-      uname: ['Thanatos OS 2.0 Death-Kernel x86_death']
-    };
-    setLines((c) => [...c, `$ ${cmd}`, ...(out[cmd] ?? [`not found: ${cmd}`])]);
-    setInput('');
-    window.requestAnimationFrame(() => { if (outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight; });
-  };
-
-  return (
-    <div className="terminal-app">
-      <div className="terminal-output" ref={outRef}>{lines.map((l, i) => <p key={`${l}-${i}`}>{l || ' '}</p>)}</div>
-      <div className="terminal-input">
-        <span>$</span>
-        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} autoFocus />
-        <button type="button" onClick={run}><Play size={15} /></button>
-      </div>
-    </div>
-  );
-}
-
 type TerminalFlow =
   | { kind: 'idle' }
   | { kind: 'rip-owner-bootstrap'; username: string; step: 'set' | 'confirm'; first: string }
@@ -653,11 +619,75 @@ type TerminalFlow =
   | { kind: 'schadelkoph-set-password'; username: string; recoveryId: string; step: 'set' | 'confirm'; first: string }
   | { kind: 'schadelkoph-password'; username: string };
 
+type ShellTab = { id: number; title: string };
+
+// The Terminal app: real shells (through the local shell bridge) in tabs, plus the
+// built-in Thanatos console for the vault commands. Without the bridge it opens
+// straight on the console.
 function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: OpenWindow[]; session: AccessSession | null; onSessionChange: (session: AccessSession | null) => void }) {
+  const nextId = useRef(2);
+  const [shells, setShells] = useState<ShellTab[]>([{ id: 1, title: 'Shell' }]);
+  const [active, setActive] = useState<number | 'console'>(1);
+  const [offline, setOffline] = useState(false);
+
+  const newShell = useCallback(() => {
+    const id = nextId.current++;
+    setOffline(false);
+    setShells((list) => [...list, { id, title: 'Shell' }]);
+    setActive(id);
+  }, []);
+  const closeShell = (id: number) => {
+    setShells((list) => {
+      const rest = list.filter((t) => t.id !== id);
+      if (active === id) setActive(rest.length ? rest[rest.length - 1].id : 'console');
+      return rest;
+    });
+  };
+  const goOffline = useCallback(() => { setOffline(true); setShells([]); setActive('console'); }, []);
+
+  return (
+    <div className="terminal-tabs-app" onKeyDown={(e) => { if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 't') { e.preventDefault(); newShell(); } }}>
+      <div className="terminal-tabs" role="tablist">
+        {shells.map((t, i) => (
+          <div key={t.id} className={clsx('terminal-tab', active === t.id && 'active')}>
+            <button type="button" role="tab" aria-selected={active === t.id} onClick={() => setActive(t.id)} title={t.title}>
+              <TerminalSquare size={13} /> {shells.length > 1 ? `${i + 1}: ` : ''}{t.title}
+            </button>
+            <button type="button" className="terminal-tab-close" aria-label="Close this shell" onClick={() => closeShell(t.id)}><X size={12} /></button>
+          </div>
+        ))}
+        <div className={clsx('terminal-tab', active === 'console' && 'active')}>
+          <button type="button" role="tab" aria-selected={active === 'console'} onClick={() => setActive('console')} title="Built-in Thanatos console (vault commands)">
+            <Skull size={13} /> Console
+          </button>
+        </div>
+        <button type="button" className="terminal-new" aria-label="New shell (Ctrl+Shift+T)" title="New shell (Ctrl+Shift+T)" onClick={newShell}><Plus size={14} /></button>
+      </div>
+      {offline ? (
+        <p className="terminal-offline">
+          Real shell not set up. Run <code>thanatos shell install</code> once in the Linux terminal, then click <strong>+</strong>.
+        </p>
+      ) : null}
+      <div className="terminal-panes">
+        {shells.map((t) => (
+          <ShellTerminal key={t.id} active={active === t.id} onOffline={goOffline}
+            onTitle={(title) => setShells((list) => list.map((x) => (x.id === t.id ? { ...x, title: title.replace(/^.*?:\s*/, '').slice(0, 28) || 'Shell' } : x)))} />
+        ))}
+        <div className="terminal-console-pane" style={{ display: active === 'console' ? 'flex' : 'none' }}>
+          <ThanatosConsole openWindows={openWindows} session={session} onSessionChange={onSessionChange} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThanatosConsole({ openWindows, session, onSessionChange }: { openWindows: OpenWindow[]; session: AccessSession | null; onSessionChange: (session: AccessSession | null) => void }) {
   const [lines, setLines] = useState<string[]>(['thanatos@crypt:~$ status', 'death kernel awake', 'vfs: indexeddb', 'remote bridge: offline', '', 'type "help" for commands']);
   const [input, setInput] = useState('');
   const [flow, setFlow] = useState<TerminalFlow>({ kind: 'idle' });
   const outRef = useRef<HTMLDivElement>(null);
+  const history = useRef<string[]>([]);
+  const historyPos = useRef(-1);
 
   const pushLines = (next: string[]) => {
     setLines((current) => [...current, ...next]);
@@ -829,6 +859,7 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
     const commandKey = cmd.toLowerCase();
     if (!cmd) return;
     setInput('');
+    if (flow.kind === 'idle') { history.current = [...history.current.filter((h) => h !== cmd), cmd].slice(-100); historyPos.current = -1; }
     if (flow.kind !== 'idle') {
       pushLines([`$ ${'*'.repeat(Math.min(cmd.length, 18))}`]);
       await handleFlow(cmd);
@@ -875,6 +906,31 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
       pushLines([`$ rip ${username}`, store.ownerVerifier ? 'owner passphrase:' : 'set owner passphrase:']);
       return;
     }
+    if (commandKey === 'open' || commandKey.startsWith('open ')) {
+      const q = commandKey.slice(4).trim();
+      const app = q ? appRegistry.find((x) => x.id === q) ?? appRegistry.find((x) => x.name.toLowerCase() === q) ?? appRegistry.find((x) => x.name.toLowerCase().startsWith(q) || x.id.startsWith(q)) : undefined;
+      if (!app) { pushLines([`$ ${cmd}`, q ? `no app called "${q}". try: apps` : 'usage: open <app>   e.g. open stumble live']); return; }
+      useDesktopBus.getState().openApp(app.id);
+      pushLines([`$ ${cmd}`, `opening ${app.name}`]);
+      return;
+    }
+    if (commandKey === 'thanatos' || commandKey.startsWith('thanatos ')) {
+      const args = commandKey.split(/\s+/).slice(1);
+      const st = useStumbleLive.getState();
+      if (args[0] === 'stumble') {
+        const sub = args[1] ?? 'status';
+        if (st.link !== 'online') { pushLines([`$ ${cmd}`, 'the StumbleChat bridge is not running. set it up once with: thanatos stumble install (in the Shell tab)']); return; }
+        if (sub === 'start' || sub === 'open') { st.openChrome(); pushLines([`$ ${cmd}`, 'opening StumbleChat in the bridge window. sign in there if it asks.']); return; }
+        if (sub === 'stop') { st.send({ type: 'stop' }); pushLines([`$ ${cmd}`, 'StumbleChat window closed. rooms are remembered.']); return; }
+        if (sub === 'status') {
+          pushLines([`$ ${cmd}`, `bridge: running`, `chrome: ${st.chrome ? 'open' : 'closed'}`,
+            ...(st.rooms.length ? st.rooms.map((r) => `  ${r.room.padEnd(20)} ${r.connected ? 'connected' : r.reopening ? 'reopening' : 'connecting'}${r.watching.length ? `, watching ${r.watching.length} cam${r.watching.length > 1 ? 's' : ''}` : ''}`) : ['rooms: none open'])]);
+          return;
+        }
+      }
+      pushLines([`$ ${cmd}`, `"${cmd}" runs in the real shell. use the Shell tab (open it with the + button).`, 'no Shell tab? set it up once in the Linux terminal: thanatos shell install']);
+      return;
+    }
     const out: Record<string, string[]> = {
       help: [`commands: ${PUBLIC_CMDS.join(', ')}`],
       status: ['kernel: THANATOS v2.0', `windows: ${openWindows.length}`, 'vfs: indexeddb persistent', 'remote: offline', 'theme: death'],
@@ -893,7 +949,19 @@ function TerminalApp({ openWindows, session, onSessionChange }: { openWindows: O
       <div className="terminal-output" ref={outRef}>{lines.map((l, i) => <p key={`${l}-${i}`}>{l || ' '}</p>)}</div>
       <div className="terminal-input">
         <span>$</span>
-        <input value={input} type={flow.kind === 'idle' || flow.kind === 'schadelkoph-username' ? 'text' : 'password'} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void run()} autoFocus />
+        <input value={input} type={flow.kind === 'idle' || flow.kind === 'schadelkoph-username' ? 'text' : 'password'} onChange={(e) => setInput(e.target.value)} autoFocus
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { void run(); return; }
+            if (flow.kind !== 'idle' || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+            // shell-style command history
+            e.preventDefault();
+            const h = history.current;
+            if (!h.length) return;
+            const pos = historyPos.current === -1 ? h.length : historyPos.current;
+            const next = e.key === 'ArrowUp' ? Math.max(0, pos - 1) : pos + 1;
+            historyPos.current = next >= h.length ? -1 : next;
+            setInput(next >= h.length ? '' : h[next]);
+          }} />
         <button type="button" onClick={() => void run()}><Play size={15} /></button>
       </div>
     </div>
@@ -1048,7 +1116,11 @@ const SETTINGS_TABS: { id: AppearanceSection | 'system'; label: string }[] = [
 ];
 
 function SettingsApp({ theme, onThemeChange }: { theme: ThanatosTheme; onThemeChange: (t: ThanatosTheme) => void }) {
-  const [tab, setTab] = useState<AppearanceSection | 'system'>('theme');
+  const isTab = (t: string | null): t is AppearanceSection | 'system' => SETTINGS_TABS.some((x) => x.id === t);
+  const [tab, setTab] = useState<AppearanceSection | 'system'>(() => { const t = useDesktopBus.getState().takeSettingsTab(); return isTab(t) ? t : 'theme'; });
+  // e.g. "Change background…" from the desktop menu while Settings is already open
+  const requested = useDesktopBus((st) => st.settingsTab);
+  useEffect(() => { if (requested) { const t = useDesktopBus.getState().takeSettingsTab(); if (isTab(t)) setTab(t); } }, [requested]);
   return (
     <div className="settings-app">
       <nav className="settings-sidebar" aria-label="Settings sections">
@@ -2319,6 +2391,7 @@ function StumbleChatApp() {
         <button type="button" className={tab === 'rooms' ? 'primary-action' : ''} onClick={() => setTab('rooms')}><DoorOpen size={15} /> Rooms</button>
         <button type="button" className={tab === 'settings' ? 'primary-action' : ''} onClick={() => setTab('settings')}><Settings size={15} /> Settings</button>
         <button type="button" onClick={openStumble}><ExternalLink size={15} /> Open StumbleChat</button>
+        {bridge ? <button type="button" title="Your normal browser, with your camera and mic. Use it to go on cam." onClick={() => openChatWindow(STUMBLECHAT_URL)}><Globe size={15} /> In my browser</button> : null}
       </div>
 
       {tab === 'rooms' ? (
@@ -2345,6 +2418,11 @@ function StumbleChatApp() {
                     <span className={`chat-role ${room.role}`}>{roleLabel(room.role)}</span>
                   </div>
                   <button type="button" onClick={() => openRoom(room.slug)}><ExternalLink size={15} /> Open</button>
+                  {bridge ? (
+                    <button type="button" title="Open this room in your normal browser, with your camera and mic, to go on cam" onClick={() => openChatWindow(stumbleRoomUrl(room.slug))}>
+                      <Camera size={15} /> Go on cam
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -2533,8 +2611,25 @@ function AppContent({ app, openWindows, theme, session, onSessionChange, onTheme
 
 // ─── window ───────────────────────────────────────────────────────────────────
 
-function DesktopWindow({ openWindow, active, openWindows, theme, session, onSessionChange, onThemeChange, onFocus, onMove, onResize, onClose, onMinimize, onMaximize }: { openWindow: OpenWindow; active: boolean; openWindows: OpenWindow[]; theme: ThanatosTheme; session: AccessSession | null; onSessionChange: (session: AccessSession | null) => void; onThemeChange: (t: ThanatosTheme) => void; onFocus: () => void; onMove: (x: number, y: number) => void; onResize: (width: number, height: number, x: number, y: number) => void; onClose: () => void; onMinimize: () => void; onMaximize: () => void }) {
-  if (openWindow.minimized) return null;
+type SnapZone = 'left' | 'right' | 'max';
+
+// Where a window lands if you let go of it here: drag to the left or right edge
+// for half the screen, or to the top to maximize.
+function snapZoneAt(x: number, y: number): SnapZone | null {
+  if (y <= 6) return 'max';
+  if (x <= 6) return 'left';
+  if (x >= window.innerWidth - 7) return 'right';
+  return null;
+}
+
+function pointerOf(e: MouseEvent | TouchEvent) {
+  if ('touches' in e) { const t = e.touches[0] ?? e.changedTouches[0]; return t ? { x: t.clientX, y: t.clientY } : null; }
+  return { x: e.clientX, y: e.clientY };
+}
+
+function DesktopWindow({ openWindow, active, openWindows, theme, session, onSessionChange, onThemeChange, onFocus, onMove, onResize, onClose, onMinimize, onMaximize, onSnapPreview, onSnap }: { openWindow: OpenWindow; active: boolean; openWindows: OpenWindow[]; theme: ThanatosTheme; session: AccessSession | null; onSessionChange: (session: AccessSession | null) => void; onThemeChange: (t: ThanatosTheme) => void; onFocus: () => void; onMove: (x: number, y: number) => void; onResize: (width: number, height: number, x: number, y: number) => void; onClose: () => void; onMinimize: () => void; onMaximize: () => void; onSnapPreview: (zone: SnapZone | null) => void; onSnap: (zone: SnapZone) => void }) {
+  // Minimized windows stay mounted (just hidden), so a shell, a video or a chat
+  // keeps running, like on any desktop.
   const size = openWindow.maximized ? { width: Math.max(360, window.innerWidth - 24), height: Math.max(260, window.innerHeight - 86) } : { width: openWindow.width, height: openWindow.height };
   const position = openWindow.maximized ? { x: 12, y: 12 } : { x: openWindow.x, y: openWindow.y };
   return (
@@ -2547,13 +2642,19 @@ function DesktopWindow({ openWindow, active, openWindows, theme, session, onSess
       minWidth={360}
       minHeight={260}
       dragHandleClassName="window-titlebar"
-      style={{ zIndex: openWindow.z }}
+      style={{ zIndex: openWindow.z, display: openWindow.minimized ? 'none' : undefined }}
       onMouseDown={onFocus}
-      onDragStop={(_, data) => onMove(data.x, data.y)}
+      onDrag={(e) => { const p = pointerOf(e as MouseEvent | TouchEvent); onSnapPreview(p ? snapZoneAt(p.x, p.y) : null); }}
+      onDragStop={(e, data) => {
+        const p = pointerOf(e as MouseEvent | TouchEvent);
+        const zone = p ? snapZoneAt(p.x, p.y) : null;
+        onSnapPreview(null);
+        if (zone) onSnap(zone); else onMove(data.x, data.y);
+      }}
       onResizeStop={(_, __, ref, ___, nextPosition) => onResize(ref.offsetWidth, ref.offsetHeight, nextPosition.x, nextPosition.y)}
       className={clsx('desktop-window', active && 'active-window')}
     >
-      <div className="window-titlebar">
+      <div className="window-titlebar" onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest('button')) onMaximize(); }}>
         <div className="window-title"><openWindow.app.icon size={17} /><span>{openWindow.app.name}</span></div>
         <div className="window-controls">
           <button type="button" aria-label="Minimize" onClick={onMinimize}><Minus size={15} /></button>
@@ -2576,9 +2677,10 @@ const SM_CATS: { id: AppCategory | 'All'; label: string; Icon: LucideIcon }[] = 
   { id: 'Private', label: 'Private', Icon: Shield },
 ];
 
-function StartMenu({ onLaunch }: { onLaunch: (app: ThanatosApp) => void }) {
+function StartMenu({ onLaunch, onClose }: { onLaunch: (app: ThanatosApp) => void; onClose: () => void }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<AppCategory | 'All'>('All');
+  const [cursor, setCursor] = useState(0);
 
   const filtered = appRegistry.filter((a) => {
     const matchCat = category === 'All' || a.category === category;
@@ -2604,8 +2706,16 @@ function StartMenu({ onLaunch }: { onLaunch: (app: ThanatosApp) => void }) {
           <input
             className="sm-search-input"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search applications..."
+            onChange={(e) => { setQuery(e.target.value); setCursor(0); }}
+            onKeyDown={(e) => {
+              // type, then Enter: launches the highlighted app. Arrows move the highlight.
+              if (e.key === 'Enter' && filtered[cursor]) { e.preventDefault(); onLaunch(filtered[cursor]); }
+              else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); setCursor((c) => Math.min(filtered.length - 1, c + (e.key === 'ArrowDown' ? 2 : 1))); }
+              else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); setCursor((c) => Math.max(0, c - (e.key === 'ArrowUp' ? 2 : 1))); }
+              else if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+            }}
+            placeholder="Search apps… (Enter to open)"
+            aria-label="Search apps"
             autoFocus
           />
           {query && (
@@ -2623,7 +2733,7 @@ function StartMenu({ onLaunch }: { onLaunch: (app: ThanatosApp) => void }) {
               key={id}
               type="button"
               className={clsx('sm-cat-btn', category === id && 'active')}
-              onClick={() => { setCategory(id); setQuery(''); }}
+              onClick={() => { setCategory(id); setQuery(''); setCursor(0); }}
             >
               <Icon size={15} />
               <span className="sm-cat-label">{label}</span>
@@ -2645,12 +2755,14 @@ function StartMenu({ onLaunch }: { onLaunch: (app: ThanatosApp) => void }) {
             <div className="sm-empty">No applications found</div>
           ) : (
             <div className="sm-app-grid">
-              {filtered.map((app) => (
+              {filtered.map((app, i) => (
                 <button
                   key={app.id}
                   type="button"
-                  className={clsx('sm-app-card', app.locked && 'locked')}
+                  className={clsx('sm-app-card', app.locked && 'locked', i === cursor && 'highlighted')}
                   onClick={() => onLaunch(app)}
+                  onMouseEnter={() => setCursor(i)}
+                  ref={i === cursor ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                 >
                   <div className="sm-app-icon">
                     <app.icon size={19} />
@@ -2669,6 +2781,29 @@ function StartMenu({ onLaunch }: { onLaunch: (app: ThanatosApp) => void }) {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+// Right-click on the desktop.
+function DesktopMenu({ x, y, onClose, onLaunch, onShowDesktop }: { x: number; y: number; onClose: () => void; onLaunch: (id: string) => void; onShowDesktop: () => void }) {
+  const item = (label: string, Icon: LucideIcon, act: () => void, hint?: string) => (
+    <button type="button" role="menuitem" onClick={() => { act(); onClose(); }}>
+      <Icon size={15} /> <span>{label}</span>{hint ? <kbd>{hint}</kbd> : null}
+    </button>
+  );
+  return (
+    <div className="desktop-menu" role="menu" style={{ left: x, top: y }} onContextMenu={(e) => e.preventDefault()}>
+      {item('Terminal', TerminalSquare, () => onLaunch('terminal'))}
+      {item('Files', Folder, () => onLaunch('files'))}
+      {item('Stumble Live', RadioTower, () => onLaunch('stumblelive'))}
+      <hr />
+      {item('Change background…', Image, () => useDesktopBus.getState().openSettings('background'))}
+      {item('Colours & effects…', Paintbrush, () => useDesktopBus.getState().openSettings('colours'))}
+      {item('Settings', Settings, () => onLaunch('settings'))}
+      <hr />
+      {item('Show desktop', Minus, onShowDesktop)}
+      {item('All apps', Skull, () => document.querySelector<HTMLButtonElement>('.tb-start')?.click(), 'Alt+Space')}
+    </div>
   );
 }
 
@@ -2747,6 +2882,31 @@ export function ThanatosDesktop() {
   const liveRequest = useStumbleLive((st) => st.liveRequest);
   useEffect(() => { if (liveRequest) openStumbleLive(); }, [liveRequest]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [snapPreview, setSnapPreview] = useState<SnapZone | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const snapWindow = (id: string, zone: SnapZone) => {
+    if (zone === 'max') { patch(id, { maximized: true, z: topZ + 1 }); return; }
+    const width = Math.round(window.innerWidth / 2);
+    patch(id, { maximized: false, x: zone === 'left' ? 0 : width, y: 0, width, height: window.innerHeight - 60, z: topZ + 1 });
+  };
+
+  // Apps, the console and the right-click menu open apps through the desktop bus.
+  const appRequest = useDesktopBus((st) => st.appRequest);
+  useEffect(() => {
+    const app = appRequest && appRegistry.find((a) => a.id === appRequest.id);
+    if (app) launch(app);
+  }, [appRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Alt+Space opens the start menu; Escape closes menus.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.code === 'Space') { e.preventDefault(); setMenu(null); setStartOpen((v) => !v); }
+      else if (e.key === 'Escape') { setMenu(null); setStartOpen(false); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const patch = (id: string, p: Partial<OpenWindow>) => setWindows((ws) => ws.map((w) => {
     if (w.id !== id) return w;
     const next = { ...w, ...p };
@@ -2755,7 +2915,21 @@ export function ThanatosDesktop() {
   }));
 
   return (
-    <main className={`desktop-shell theme-${theme}`} style={appearanceVars(look) as CSSProperties}>
+    <main className={`desktop-shell theme-${theme}`} style={appearanceVars(look) as CSSProperties}
+      onMouseDown={(e) => {
+        // clicking anywhere else closes the start menu and the right-click menu
+        const t = e.target as HTMLElement;
+        if (!t.closest('.start-menu, .tb-start')) setStartOpen(false);
+        if (!t.closest('.desktop-menu')) setMenu(null);
+      }}
+      onContextMenu={(e) => {
+        // right-click on the desktop itself (not inside a window or the taskbar)
+        const t = e.target as HTMLElement;
+        if (t.closest('.desktop-window, .taskbar, .start-menu, .stumble-widget, .stumble-toasts, input, textarea')) return;
+        e.preventDefault();
+        setStartOpen(false);
+        setMenu({ x: Math.min(e.clientX, window.innerWidth - 230), y: Math.min(e.clientY, window.innerHeight - 300) });
+      }}>
       {!booted ? <BootLayer onDone={handleBootDone} /> : null}
       <div className="desktop-wallpaper" />
       {fx.sprite && look.background.kind === 'theme' ? <div className="sprite-background" aria-hidden="true" /> : null}
@@ -2779,13 +2953,20 @@ export function ThanatosDesktop() {
             onResize={(width, height, x, y) => patch(w.id, { width, height, x, y })}
             onClose={() => setWindows((ws) => ws.filter((x) => x.id !== w.id))}
             onMinimize={() => patch(w.id, { minimized: true })}
+            onSnapPreview={setSnapPreview}
+            onSnap={(zone) => snapWindow(w.id, zone)}
             onMaximize={() => patch(w.id, { maximized: !w.maximized, z: topZ + 1 })} />
         ))}
       </div>
+      {snapPreview ? <div className={`snap-preview snap-${snapPreview}`} aria-hidden="true" /> : null}
+      {menu ? (
+        <DesktopMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} onLaunch={(id) => { const app = appRegistry.find((a) => a.id === id); if (app) launch(app); }}
+          onShowDesktop={() => setWindows((ws) => ws.map((w) => ({ ...w, minimized: true })))} />
+      ) : null}
       {booted ? <DesktopPets visible={windows.some((w) => w.app.id === 'rotvice')} /> : null}
       {booted ? <StumbleWidget onOpen={openStumbleLive} /> : null}
       {booted ? <StumbleToasts onOpen={openStumbleLive} /> : null}
-      <AnimatePresence>{startOpen ? <StartMenu onLaunch={launch} /> : null}</AnimatePresence>
+      <AnimatePresence>{startOpen ? <StartMenu onLaunch={launch} onClose={() => setStartOpen(false)} /> : null}</AnimatePresence>
       <nav className="taskbar">
         <button type="button" className={clsx('tb-start', startOpen && 'open')} onClick={() => setStartOpen((v) => !v)}>
           <Skull size={16} />
@@ -2796,8 +2977,11 @@ export function ThanatosDesktop() {
             <button
               key={w.id}
               type="button"
-              className={clsx('tb-app', w.id === activeId && !w.minimized && 'active')}
-              onClick={() => patch(w.id, { minimized: false, z: topZ + 1 })}
+              className={clsx('tb-app', w.id === activeId && !w.minimized && 'active', w.minimized && 'minimized')}
+              title={`${w.app.name}: click to ${w.id === activeId && !w.minimized ? 'minimize' : 'show'}, middle-click to close`}
+              // like any taskbar: clicking the window in front minimizes it, otherwise brings it forward
+              onClick={() => patch(w.id, w.id === activeId && !w.minimized ? { minimized: true } : { minimized: false, z: topZ + 1 })}
+              onAuxClick={(e) => { if (e.button === 1) setWindows((ws) => ws.filter((x) => x.id !== w.id)); }}
             >
               <w.app.icon size={14} />
               <span className="tb-app-label">{w.app.name}</span>
