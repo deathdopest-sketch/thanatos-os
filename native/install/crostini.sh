@@ -98,6 +98,12 @@ else
   echo "  node missing; run: thanatos lang install node && re-run this script"
 fi
 
+step "Terminal service"
+if command -v npm >/dev/null; then
+  # makes the desktop's Terminal app a real shell
+  thanatos shell install || echo "  ! terminal service setup failed; retry later with: thanatos shell install"
+fi
+
 step "StumbleChat bridge"
 if command -v npm >/dev/null; then
   # background service; opens its Chrome window when you open StumbleChat on the desktop

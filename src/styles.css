@@ -4058,7 +4058,10 @@ body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  /* clip, not hidden: hidden still lets focus() and scrollIntoView() scroll the
+     whole desktop sideways (e.g. the terminal's hidden input), shifting every window */
   overflow: hidden;
+  overflow: clip;
   background: rgb(var(--curse-shadow));
   --curse-primary: 255, 35, 96;
   --curse-accent: 142, 28, 255;
@@ -4206,6 +4209,7 @@ body {
   position: absolute;
   inset: 0 0 60px;
   z-index: 500;
+  overflow: clip;
 }
 
 .death-brand {
@@ -5325,3 +5329,141 @@ body {
 .appearance-effects input { margin-top: 3px; }
 
 .appearance-reset { justify-items: start; }
+
+/* ─── Terminal: real shells in tabs + the built-in console ─── */
+.terminal-tabs-app {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #050206;
+}
+
+.terminal-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 6px 8px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(var(--curse-primary), 0.2);
+}
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  color: rgba(var(--ui-text), 0.6);
+}
+
+.terminal-tab.active {
+  border-color: rgba(var(--curse-primary), 0.3);
+  background: rgba(var(--curse-primary), 0.1);
+  color: rgb(var(--ui-text));
+}
+
+.terminal-tab button,
+.terminal-new {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.terminal-tab .terminal-tab-close { padding: 0 7px 0 2px; opacity: 0.55; }
+.terminal-tab .terminal-tab-close:hover { opacity: 1; color: rgb(var(--curse-primary)); }
+.terminal-new { margin-left: 2px; border-radius: 6px; color: rgba(var(--ui-text), 0.6); }
+.terminal-new:hover { background: rgba(var(--curse-primary), 0.12); color: rgb(var(--ui-text)); }
+
+.terminal-offline {
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(var(--curse-primary), 0.2);
+  background: rgba(var(--curse-primary), 0.08);
+  color: #c6b7aa;
+  font-size: 0.82rem;
+}
+
+.terminal-offline code { color: rgb(var(--ui-text)); font-family: 'JetBrains Mono', monospace; }
+
+.terminal-panes { position: relative; flex: 1; min-height: 0; }
+.shell-terminal { position: absolute; inset: 0; padding: 6px 4px 4px 10px; }
+.shell-terminal .xterm { height: 100%; }
+.shell-terminal .xterm-viewport { scrollbar-width: thin; scrollbar-color: rgba(var(--curse-primary), 0.35) transparent; }
+.terminal-console-pane { position: absolute; inset: 0; }
+.terminal-console-pane > .terminal-app { flex: 1; }
+
+/* ─── Natural desktop: start-menu highlight, minimized buttons, snapping, right-click menu ─── */
+.sm-app-card.highlighted {
+  background: rgba(var(--curse-primary), 0.12);
+  border-color: rgba(var(--curse-primary), 0.35);
+}
+
+.tb-app.minimized { opacity: 0.6; }
+
+.snap-preview {
+  position: fixed;
+  z-index: 450; /* under the windows (500), over the desktop */
+  border: 2px solid rgba(var(--curse-primary), 0.7);
+  border-radius: 10px;
+  background: rgba(var(--curse-primary), 0.12);
+  box-shadow: 0 0 40px rgba(var(--curse-primary), 0.25) inset;
+  pointer-events: none;
+  animation: snap-in 0.12s ease-out;
+}
+
+.snap-preview.snap-left { top: 6px; left: 6px; width: calc(50% - 9px); bottom: 66px; }
+.snap-preview.snap-right { top: 6px; right: 6px; width: calc(50% - 9px); bottom: 66px; }
+.snap-preview.snap-max { top: 6px; left: 6px; right: 6px; bottom: 66px; }
+
+@keyframes snap-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: none; } }
+
+.desktop-menu {
+  position: fixed;
+  z-index: 7700;
+  display: grid;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid rgba(var(--curse-primary), 0.35);
+  border-radius: 10px;
+  background: rgba(8, 3, 6, 0.96);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 22px rgba(var(--curse-primary), 0.14);
+  backdrop-filter: blur(10px);
+  animation: snap-in 0.1s ease-out;
+}
+
+.desktop-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: rgb(var(--ui-text));
+  font: inherit;
+  font-size: 0.86rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.desktop-menu button svg { color: rgb(var(--curse-primary)); }
+.desktop-menu button span { flex: 1; }
+.desktop-menu button:hover,
+.desktop-menu button:focus-visible { background: rgba(var(--curse-primary), 0.14); outline: none; }
+.desktop-menu kbd { color: #8f8189; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
+.desktop-menu hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid rgba(var(--curse-primary), 0.18); }
+
+@media (prefers-reduced-motion: reduce) {
+  .snap-preview, .desktop-menu { animation: none; }
+}

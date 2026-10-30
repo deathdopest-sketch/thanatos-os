@@ -60,12 +60,30 @@ Open **Settings** to change how Thanatos looks:
 
 Thanatos is a full desktop in your browser, with windows, a start menu and a taskbar. It ships with 60 apps:
 
-- **Developer tools:** Code Studio (CodeMirror 6), terminal, git client, API client, SQL manager, JSON/diff/hex/regex/hash tools, network monitor, Linux man pages.
+- **A real terminal:** the Terminal app runs your actual Linux shell in tabs, so `thanatos`, git, npm and everything else work right on the desktop. A built-in console tab keeps the vault commands.
+- **Developer tools:** Code Studio (CodeMirror 6), git client, API client, SQL manager, JSON/diff/hex/regex/hash tools, network monitor, Linux man pages.
 - **System:** files, settings, tasks, clock, calendar, weather, notes, mail.
 - **Media:** music, video, images, PDF, camera, voice recorder, paint, audio visualizer.
 - **Private apps:** PIN-gated and local-first (see Security).
 
 On a Chromebook it installs as a fullscreen app on top of a real Linux toolchain: Node, Python, Rust, Go, C, and the Vita and Reaper languages.
+
+### Works like a desktop should
+
+| You want to… | Do this |
+|---|---|
+| Open any app | **Alt+Space**, type part of its name, **Enter** (arrow keys pick another) |
+| Close a menu | **Esc**, or click anywhere else |
+| Maximize a window | Double-click its title bar (again to restore) |
+| Put two windows side by side | Drag a window to the left or right edge of the screen |
+| Maximize by dragging | Drag a window to the top edge |
+| Minimize a window | Click its taskbar button while it's in front. Click again to bring it back |
+| Close a window from the taskbar | Middle-click its taskbar button |
+| Change the background, open the Terminal, or show the desktop | Right-click the desktop |
+| New terminal tab | **+** in the Terminal, or **Ctrl+Shift+T** |
+| Repeat a console command | **↑** / **↓** in the Console tab |
+
+Minimizing a window keeps it running, so a shell, a video or a chat carries on in the background.
 
 ## Security
 
@@ -159,7 +177,9 @@ If you don't like the result, **Theme → Reset look to defaults** puts everythi
 thanatos update
 ```
 
-This pulls the latest version, rebuilds the desktop and restarts it, and restarts the bridge if it's running. Then reload the Thanatos tab (Ctrl+Shift+R).
+This pulls the latest version, rebuilds the desktop and restarts it, refreshes the background services, and sets up any new ones. Then reload the Thanatos tab (Ctrl+Shift+R).
+
+You can run it from the Terminal app too. It won't restart the terminal service from in there, because that would close the terminal running the update. If the terminal service itself changed, it says so, and switches over at your next login.
 
 ### Command cheat sheet
 
@@ -169,13 +189,15 @@ This pulls the latest version, rebuilds the desktop and restarts it, and restart
 | `thanatos update` | Gets the latest Thanatos, rebuilds, restarts |
 | `thanatos web open` | Opens the desktop |
 | `thanatos web start` / `stop` / `status` | Controls the desktop server |
+| `thanatos shell install` | Sets up the real shell for the Terminal app (the installer and `thanatos update` do this for you) |
+| `thanatos shell status` / `restart` | Checks on or restarts it. Restarting closes open terminals |
 | `thanatos stumble install` | Sets up the StumbleChat bridge as a background service (the installer does this for you) |
 | `thanatos stumble start` | Opens the bridge's Chrome window, same as clicking the StumbleChat app |
 | `thanatos stumble stop` | Closes the bridge's Chrome window. Your rooms are remembered |
 | `thanatos stumble status` | Shows whether it's running and how many rooms are open |
 | `thanatos stumble log` | Shows what the bridge is doing (Ctrl+C to exit) |
 
-The full list, including the learning journal, focus timer and project templates, is in [`native/README.md`](native/README.md).
+All of these work in the desktop's own **Terminal** app as well as ChromeOS's Linux terminal. The full list, including the learning journal, focus timer and project templates, is in [`native/README.md`](native/README.md).
 
 ### Using the widget
 
@@ -216,6 +238,14 @@ The bridge's Chrome window was closed. Click the radio icon or open the StumbleC
 
 **My background video is choppy or the desktop feels slow**
 Large videos are heavy for a Chromebook. Use a shorter or smaller clip (720p is plenty), turn on some **Blur**, or switch off effects like **Film grain** and **Blood rain** under Settings → Effects.
+
+**My camera doesn't work in the StumbleChat window that opens**
+That window is the bridge's own Chrome, running in Linux, and ChromeOS doesn't give Linux your camera by default. Two fixes:
+- **Go on cam from your normal browser.** In the StumbleChat app, click **Go on cam** next to a room (or **In my browser** at the top). The room opens in ChromeOS's Chrome, where your camera already works. The bridge carries on keeping the room open, showing chat and cams in Stumble Live. If StumbleChat won't let the same account be in a room twice, close the room's tab in the bridge window while you're on cam.
+- **Let Linux use the camera.** In ChromeOS **Settings → About ChromeOS → Developers → Linux development environment**, turn on camera (and microphone) access if your ChromeOS version has that option, then restart Linux. Run `ls /dev/video*` in the Terminal: if it lists a device, the bridge's window can use the camera after you allow it in the site's permission prompt.
+
+**The Terminal app only shows the Console tab**
+The terminal service isn't running. Run `thanatos shell install` once in ChromeOS's Linux terminal, then click **+** in the Terminal app.
 
 **Chat shows up but the Cams list is empty**
 Run `thanatos stumble log` and send the output along with an issue. StumbleChat may have changed its page.

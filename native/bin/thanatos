@@ -24,6 +24,7 @@ ${pink}thanatos${off} — Thanatos OS control
   ${violet}lang list${off}                  list language plugins
   ${violet}lang install <name|all>${off}    install a toolchain (node python rust go c vita reaper)
   ${violet}web start|stop|status|open${off} run the Lilly desktop on localhost:$WEB_PORT
+  ${violet}shell install|restart|status${off} real terminals for the desktop's Terminal app
   ${violet}stumble install${off}            set up the StumbleChat bridge (opens by itself from the desktop)
   ${violet}stumble start|stop|status|log${off} open/close its Chrome window, check on it
   ${violet}new <kind> <name>${off}          scaffold a project (node python rust go c vita reaper)
@@ -101,30 +102,79 @@ lang() {
 }
 
 # ---------- update ----------
+# Two steps: pull, then hand over to the freshly pulled copy of this script, so
+# the rest of the update always runs the new code.
 update() {
   cd "$THANATOS_HOME" || die "repo not at $THANATOS_HOME (set THANATOS_HOME)"
-  command -v npm >/dev/null || die "npm missing: thanatos lang install node, then open a new terminal"
-  local before; before=$(git rev-parse HEAD)
-  git pull --ff-only || die "git pull failed; commit or stash local changes in $THANATOS_HOME"
+  if [ "${1:-}" != --after-pull ]; then
+    command -v npm >/dev/null || die "npm missing: thanatos lang install node, then open a new terminal"
+    local head; head=$(git rev-parse HEAD)
+    git pull --ff-only || die "git pull failed; commit or stash local changes in $THANATOS_HOME"
+    exec "$THANATOS_HOME/native/bin/thanatos" update --after-pull "$head"
+  fi
+  local before=$2
+  changed() { ! git diff --quiet "$before" HEAD -- "$@"; }
   # reinstall only when dependencies changed
-  if ! git diff --quiet "$before" HEAD -- package-lock.json || [ ! -d node_modules ]; then npm ci --no-audit --no-fund; fi
+  if changed package-lock.json || [ ! -d node_modules ]; then npm ci --no-audit --no-fund; fi
   npm run build || die "build failed (output above)"
   ln -sfn "$THANATOS_HOME/native/bin/thanatos" "$HOME/.local/bin/thanatos"
   web stop >/dev/null; web start
-  if systemctl --user cat "$STUMBLE_UNIT" >/dev/null 2>&1; then
-    # refresh the unit, reinstall deps if they changed, restart; reopen Chrome if it was open
+
+  # StumbleChat bridge: refresh and restart; reopen Chrome if it was open
+  if has_unit "$STUMBLE_UNIT"; then
     local chrome_was_open; chrome_was_open=$(curl -fsS "http://127.0.0.1:${STUMBLE_BRIDGE_PORT:-4180}/health" 2>/dev/null | grep -c '"chrome":true' || true)
-    if ! git diff --quiet "$before" HEAD -- native/stumble-bridge/package-lock.json; then stumble install >/dev/null
-    else
-      sed "s#%h/thanatos-os#$THANATOS_HOME#" native/systemd/user/$STUMBLE_UNIT > "$HOME/.config/systemd/user/$STUMBLE_UNIT"
-      systemctl --user daemon-reload; systemctl --user restart "$STUMBLE_UNIT"
-    fi
+    if changed native/stumble-bridge/package-lock.json; then stumble install >/dev/null
+    else install_unit "$STUMBLE_UNIT"; systemctl --user restart "$STUMBLE_UNIT"; fi
     [ "$chrome_was_open" = 1 ] && stumble start >/dev/null
   elif [ -d native/stumble-bridge/node_modules ]; then
-    # set up before the background service existed: switch over to it
-    stumble install
+    stumble install   # set up before the background service existed: switch over to it
+  fi
+
+  # Shell bridge: install if missing; restart if it changed. Restarting it closes
+  # every Thanatos terminal, so not from inside one (that would end this update).
+  if ! has_unit "$SHELL_UNIT"; then shell install
+  elif changed native/shell-bridge native/systemd/user/$SHELL_UNIT; then
+    if [ -n "${THANATOS_TERMINAL:-}" ]; then
+      install_unit "$SHELL_UNIT"
+      say "terminal service updated; it switches over next login (or run 'thanatos shell restart', which closes open terminals)"
+    else install_unit "$SHELL_UNIT"; systemctl --user restart "$SHELL_UNIT"; fi
   fi
   say "updated to $(git log -1 --format='%h %s')"
+}
+
+# ---------- background services ----------
+has_unit() { systemctl --user cat "$1" >/dev/null 2>&1; }
+# Write a user unit pointing at this repo and (re)load it. Returns non-zero
+# where there's no systemd user session.
+install_unit() {
+  mkdir -p "$HOME/.config/systemd/user"
+  sed "s#%h/thanatos-os#$THANATOS_HOME#" "$THANATOS_HOME/native/systemd/user/$1" > "$HOME/.config/systemd/user/$1"
+  systemctl --user daemon-reload 2>/dev/null
+}
+
+# ---------- shell ----------
+# Real terminals for the desktop's Terminal app, so every command works there.
+SHELL_UNIT=thanatos-shell.service
+shell() {
+  local dir="$THANATOS_HOME/native/shell-bridge" port="${THANATOS_SHELL_PORT:-4181}"
+  case "${1:-status}" in
+    install)
+      command -v node >/dev/null || die "node missing: thanatos lang install node"
+      command -v python3 >/dev/null || die "python3 missing: sudo apt-get install -y python3"
+      (cd "$dir" && npm ci --no-audit --no-fund --silent)
+      if install_unit "$SHELL_UNIT" && systemctl --user enable --now "$SHELL_UNIT" 2>/dev/null; then
+        say "terminal service running. The desktop's Terminal app is now a real shell"
+      else
+        say "installed. No background services here, so run 'node $dir/server.js' to use the Terminal app's shell"
+      fi ;;
+    restart) systemctl --user restart "$SHELL_UNIT" && say "terminal service restarted" ;;
+    status)
+      if curl -fsS -o /dev/null "http://127.0.0.1:$port/health" 2>/dev/null; then say "running: $(curl -fsS "http://127.0.0.1:$port/health")"
+      elif has_unit "$SHELL_UNIT"; then say "installed but not running: systemctl --user status $SHELL_UNIT"
+      else say "not installed (thanatos shell install)"; fi ;;
+    log) journalctl --user -u "$SHELL_UNIT" -n 50 -f ;;
+    *) die "usage: thanatos shell install|restart|status|log" ;;
+  esac
 }
 
 # ---------- web ----------
@@ -167,7 +217,6 @@ STUMBLE_UNIT=thanatos-stumble.service
 stumble() {
   local dir="$THANATOS_HOME/native/stumble-bridge" port="${STUMBLE_BRIDGE_PORT:-4180}"
   running() { curl -fsS -o /dev/null "http://127.0.0.1:$port/health" 2>/dev/null; }
-  has_unit() { systemctl --user cat "$STUMBLE_UNIT" >/dev/null 2>&1; }
   control() { curl -fsS -X POST -H 'X-Thanatos: 1' "http://127.0.0.1:$port/$1" >/dev/null; }
   wait_up() { for _ in $(seq 20); do running && return 0; sleep 0.5; done; return 1; }
   case "${1:-status}" in
@@ -182,9 +231,7 @@ stumble() {
       fi
       # A copy started by hand would hold the port; the service takes over from it.
       if [ -f "$DATA/stumble.pid" ]; then kill -TERM -- "-$(cat "$DATA/stumble.pid")" 2>/dev/null || true; rm -f "$DATA/stumble.pid"; sleep 1; fi
-      mkdir -p "$HOME/.config/systemd/user"
-      sed "s#%h/thanatos-os#$THANATOS_HOME#" "$THANATOS_HOME/native/systemd/user/$STUMBLE_UNIT" > "$HOME/.config/systemd/user/$STUMBLE_UNIT"
-      if systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now "$STUMBLE_UNIT" 2>/dev/null; then
+      if install_unit "$STUMBLE_UNIT" && systemctl --user enable --now "$STUMBLE_UNIT" 2>/dev/null; then
         say "stumble bridge installed and running in the background"
         say "open StumbleChat or Stumble Live on the desktop and its Chrome window opens for you to sign in"
       else
@@ -192,7 +239,7 @@ stumble() {
       fi ;;
     start)
       if ! running; then
-        if has_unit; then systemctl --user start "$STUMBLE_UNIT"
+        if has_unit "$STUMBLE_UNIT"; then systemctl --user start "$STUMBLE_UNIT"
         else
           [ -d "$dir/node_modules" ] || stumble install
           running || {
@@ -207,18 +254,18 @@ stumble() {
       say "StumbleChat is open in the bridge's Chrome window. Sign in there, then use Stumble Live" ;;
     stop)
       # Closes the Chrome window. The service stays ready for the desktop to reopen it.
-      if has_unit; then running && control stop; say "StumbleChat window closed (rooms are remembered)"
+      if has_unit "$STUMBLE_UNIT"; then running && control stop; say "StumbleChat window closed (rooms are remembered)"
       else
         if [ -f "$DATA/stumble.pid" ]; then kill -TERM -- "-$(cat "$DATA/stumble.pid")" 2>/dev/null || true; rm -f "$DATA/stumble.pid"; fi
         say "bridge stopped (rooms are remembered for next start)"
       fi ;;
     status)
       if running; then say "running: $(curl -fsS "http://127.0.0.1:$port/health")"
-      elif has_unit; then say "service installed but not running: systemctl --user status $STUMBLE_UNIT"
+      elif has_unit "$STUMBLE_UNIT"; then say "service installed but not running: systemctl --user status $STUMBLE_UNIT"
       elif [ -d "$dir/node_modules" ]; then say "not running (thanatos stumble start, or thanatos stumble install to have it start by itself)"
       else say "not installed (thanatos stumble install)"; fi ;;
     log)
-      if has_unit; then journalctl --user -u "$STUMBLE_UNIT" -n 50 -f
+      if has_unit "$STUMBLE_UNIT"; then journalctl --user -u "$STUMBLE_UNIT" -n 50 -f
       else tail -n 50 -f "$DATA/stumble.log"; fi ;;
     *) die "usage: thanatos stumble install|start|stop|status|log" ;;
   esac
@@ -336,9 +383,10 @@ learn() {
 cmd=${1:-help}; shift || true
 case "$cmd" in
   doctor) doctor ;;
-  update) update ;;
+  update) update "$@" ;;
   lang) lang "$@" ;;
   web) web "$@" ;;
+  shell) shell "$@" ;;
   stumble) stumble "$@" ;;
   new) new_project "$@" ;;
   log) log_cmd "$@" ;;

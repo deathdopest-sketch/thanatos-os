@@ -24,8 +24,8 @@ export default tseslint.config(
     }
   },
   {
-    // the StumbleChat bridge: Node (CommonJS), plus scripts it injects into Chrome pages
-    files: ['native/stumble-bridge/**/*.js'],
+    // the local bridges: Node (CommonJS), plus scripts the StumbleChat bridge injects into Chrome pages
+    files: ['native/stumble-bridge/**/*.js', 'native/shell-bridge/**/*.js'],
     languageOptions: {
       sourceType: 'commonjs',
       globals: { ...globals.node, ...globals.browser }
