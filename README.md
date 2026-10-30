@@ -245,7 +245,7 @@ That window is the bridge's own Chrome, running in Linux, and ChromeOS doesn't g
 - **Let Linux use the camera.** In ChromeOS **Settings → About ChromeOS → Developers → Linux development environment**, turn on camera (and microphone) access if your ChromeOS version has that option, then restart Linux. Run `ls /dev/video*` in the Terminal: if it lists a device, the bridge's window can use the camera after you allow it in the site's permission prompt.
 
 **The Terminal app only shows the Console tab**
-The terminal service isn't running. Run `thanatos shell install` once in ChromeOS's Linux terminal, then click **+** in the Terminal app.
+The terminal service isn't running. In ChromeOS's Linux terminal, run `thanatos update`, then `thanatos doctor`. Under **services**, each one should say *running*. If one doesn't, doctor shows the last lines of its log. Then click **+** in the Terminal app.
 
 **Chat shows up but the Cams list is empty**
 Run `thanatos stumble log` and send the output along with an issue. StumbleChat may have changed its page.

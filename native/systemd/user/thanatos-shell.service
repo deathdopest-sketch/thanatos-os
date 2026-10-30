@@ -6,8 +6,9 @@ After=default.target
 Type=simple
 # Installers rewrite this path to the repo location.
 WorkingDirectory=%h/thanatos-os/native/shell-bridge
-# Login shell for fnm-managed node; each terminal it opens is a login shell too.
-ExecStart=/bin/bash -lc 'exec node server.js'
+# thanatos-run puts your fnm-managed node on PATH (services don't read ~/.bashrc).
+# Each terminal it opens is a normal login shell.
+ExecStart=%h/thanatos-os/native/bin/thanatos-run node server.js
 Restart=always
 RestartSec=3
 

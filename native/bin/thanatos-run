@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# thanatos-run: run a command with your Node (fnm) on PATH.
+#
+# The background services (desktop, terminal, StumbleChat bridge) need node,
+# but they don't get it from your shell: fnm is set up at the end of ~/.bashrc,
+# and Debian's ~/.bashrc stops early in non-interactive shells. So set it up here.
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+if command -v fnm >/dev/null 2>&1; then
+  eval "$(fnm env --shell bash)"
+  fnm use default --silent-if-unchanged >/dev/null 2>&1 || true
+fi
+command -v node >/dev/null 2>&1 || { echo "thanatos-run: node not found. Run: thanatos lang install node" >&2; exit 127; }
+exec "$@"

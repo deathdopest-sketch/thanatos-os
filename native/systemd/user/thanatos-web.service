@@ -6,8 +6,8 @@ After=default.target
 Type=simple
 # Installers rewrite this path to the repo location.
 WorkingDirectory=%h/thanatos-os
-# Login shells pick up fnm/nvm-managed node.
-ExecStart=/bin/bash -lc 'exec npx vite preview --host 127.0.0.1 --port 4173 --strictPort'
+# thanatos-run puts your fnm-managed node on PATH (services don't read ~/.bashrc).
+ExecStart=%h/thanatos-os/native/bin/thanatos-run npx vite preview --host 127.0.0.1 --port 4173 --strictPort
 Restart=on-failure
 RestartSec=5
 

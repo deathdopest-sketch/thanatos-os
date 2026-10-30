@@ -65,7 +65,16 @@ doctor() {
   fi
   [ -f "$HOME/.ssh/id_ed25519.pub" ] && printf '  %s✓%s ssh key\n' "$mint" "$off" \
     || printf '  %s✗%s ssh key    run: ssh-keygen -t ed25519\n' "$red" "$off"
+  say "services"
+  local svc
+  for svc in "thanatos-web.service $WEB_PORT - desktop" "$SHELL_UNIT ${THANATOS_SHELL_PORT:-4181} health terminal" "$STUMBLE_UNIT ${STUMBLE_BRIDGE_PORT:-4180} health stumble"; do
+    # shellcheck disable=SC2086
+    set -- $svc
+    if service_report "$1" "$2" "$( [ "$3" = - ] || echo "$3")" "$4"; then ok=$((ok + 1)); else miss=$((miss + 1)); fi
+  done
   printf '\n%s%d ok, %d missing%s\n' "$dim" "$ok" "$miss" "$off"
+  [ "$miss" -gt 0 ] && printf '%sservices not running? thanatos update refreshes and restarts them%s\n' "$dim" "$off"
+  return 0
 }
 
 # ---------- lang ----------
@@ -118,32 +127,50 @@ update() {
   if changed package-lock.json || [ ! -d node_modules ]; then npm ci --no-audit --no-fund; fi
   npm run build || die "build failed (output above)"
   ln -sfn "$THANATOS_HOME/native/bin/thanatos" "$HOME/.local/bin/thanatos"
-  web stop >/dev/null; web start
+  if has_unit thanatos-web.service; then install_unit thanatos-web.service; systemctl --user restart thanatos-web.service; say "desktop at http://localhost:$WEB_PORT"
+  else web stop >/dev/null; web start; fi
 
   # StumbleChat bridge: refresh and restart; reopen Chrome if it was open
   if has_unit "$STUMBLE_UNIT"; then
     local chrome_was_open; chrome_was_open=$(curl -fsS "http://127.0.0.1:${STUMBLE_BRIDGE_PORT:-4180}/health" 2>/dev/null | grep -c '"chrome":true' || true)
     if changed native/stumble-bridge/package-lock.json; then stumble install >/dev/null
     else install_unit "$STUMBLE_UNIT"; systemctl --user restart "$STUMBLE_UNIT"; fi
+    wait_healthy 4180 || say "StumbleChat bridge didn't come up: thanatos stumble log"
     [ "$chrome_was_open" = 1 ] && stumble start >/dev/null
   elif [ -d native/stumble-bridge/node_modules ]; then
     stumble install   # set up before the background service existed: switch over to it
   fi
 
-  # Shell bridge: install if missing; restart if it changed. Restarting it closes
-  # every Thanatos terminal, so not from inside one (that would end this update).
+  # Shell bridge: install if missing; restart if it changed or isn't running.
+  # Restarting it closes every Thanatos terminal, so not from inside one (that
+  # would end this update).
   if ! has_unit "$SHELL_UNIT"; then shell install
-  elif changed native/shell-bridge native/systemd/user/$SHELL_UNIT; then
+  elif changed native/shell-bridge native/systemd/user/$SHELL_UNIT native/bin/thanatos-run || ! healthy 4181; then
+    install_unit "$SHELL_UNIT"
     if [ -n "${THANATOS_TERMINAL:-}" ]; then
-      install_unit "$SHELL_UNIT"
       say "terminal service updated; it switches over next login (or run 'thanatos shell restart', which closes open terminals)"
-    else install_unit "$SHELL_UNIT"; systemctl --user restart "$SHELL_UNIT"; fi
+    else
+      systemctl --user restart "$SHELL_UNIT"
+      wait_healthy 4181 || say "terminal service didn't come up: thanatos shell status"
+    fi
   fi
   say "updated to $(git log -1 --format='%h %s')"
 }
 
 # ---------- background services ----------
 has_unit() { systemctl --user cat "$1" >/dev/null 2>&1; }
+healthy() { curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$1/${2:-health}" 2>/dev/null; }
+wait_healthy() { for _ in $(seq 20); do healthy "$@" && return 0; sleep 0.5; done; return 1; }
+# One line per service for `thanatos doctor` and the status commands: running,
+# or why not, with the last error from its log.
+service_report() {
+  local unit=$1 port=$2 path=${3:-health} name=$4
+  if healthy "$port" "$path"; then printf '  %s✓%s %-10s running\n' "$mint" "$off" "$name"; return 0; fi
+  if ! has_unit "$unit"; then printf '  %s✗%s %-10s not installed\n' "$red" "$off" "$name"; return 1; fi
+  printf '  %s✗%s %-10s %s, not answering\n' "$red" "$off" "$name" "$(systemctl --user is-active "$unit" 2>/dev/null)"
+  journalctl --user -u "$unit" -n 3 --no-pager -o cat 2>/dev/null | sed "s/^/      $dim/;s/\$/$off/"
+  return 1
+}
 # Write a user unit pointing at this repo and (re)load it. Returns non-zero
 # where there's no systemd user session.
 install_unit() {
@@ -162,16 +189,17 @@ shell() {
       command -v node >/dev/null || die "node missing: thanatos lang install node"
       command -v python3 >/dev/null || die "python3 missing: sudo apt-get install -y python3"
       (cd "$dir" && npm ci --no-audit --no-fund --silent)
-      if install_unit "$SHELL_UNIT" && systemctl --user enable --now "$SHELL_UNIT" 2>/dev/null; then
-        say "terminal service running. The desktop's Terminal app is now a real shell"
+      if install_unit "$SHELL_UNIT" && systemctl --user enable "$SHELL_UNIT" 2>/dev/null && systemctl --user restart "$SHELL_UNIT"; then
+        wait_healthy "$port" || { service_report "$SHELL_UNIT" "$port" health terminal; die "terminal service didn't start (details above)"; }
+        say "terminal service running. Open (or reopen) the Terminal app on the desktop for a real shell"
       else
         say "installed. No background services here, so run 'node $dir/server.js' to use the Terminal app's shell"
       fi ;;
     restart) systemctl --user restart "$SHELL_UNIT" && say "terminal service restarted" ;;
     status)
-      if curl -fsS -o /dev/null "http://127.0.0.1:$port/health" 2>/dev/null; then say "running: $(curl -fsS "http://127.0.0.1:$port/health")"
-      elif has_unit "$SHELL_UNIT"; then say "installed but not running: systemctl --user status $SHELL_UNIT"
-      else say "not installed (thanatos shell install)"; fi ;;
+      if service_report "$SHELL_UNIT" "$port" health terminal; then :
+      elif has_unit "$SHELL_UNIT"; then say "fix it with: thanatos shell restart (or thanatos update)"
+      else say "set it up with: thanatos shell install"; fi ;;
     log) journalctl --user -u "$SHELL_UNIT" -n 50 -f ;;
     *) die "usage: thanatos shell install|restart|status|log" ;;
   esac
