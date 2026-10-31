@@ -1,16 +1,17 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Radio, Send, Video, VideoOff, X } from 'lucide-react';
 import clsx from 'clsx';
-import { MAX_WATCHED_CAMS, isMention, type StumbleLine } from '../lib/stumble-live';
+import { MAX_WATCHED_CAMS, isGuest, isMention, type StumbleLine } from '../lib/stumble-live';
 import { useStumbleLive } from '../lib/stumble-live-store';
 
 // The full view of the rooms the bridge keeps open. The connection itself lives in
 // the shared store, so closing this window doesn't drop anything.
 export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
-  const { link, chrome, rooms, lines, frames, error, send, focusRoom, setFocusRoom, clearUnread, openChrome } = useStumbleLive();
+  const { link, chrome, rooms, lines, frames, error, sayFailed, send, focusRoom, setFocusRoom, clearUnread, clearSayFailed, openChrome } = useStumbleLive();
   const [active, setActive] = useState<string | null>(focusRoom);
   const [joinInput, setJoinInput] = useState('');
   const [reply, setReply] = useState('');
+  const lastSent = useRef('');
 
   // opening this app opens StumbleChat in the bridge's Chrome window (sign in there)
   useEffect(() => { useStumbleLive.getState().openChrome(); clearUnread(); }, [clearUnread]);
@@ -38,9 +39,16 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
   const sendReply = () => {
     const text = reply.trim();
     if (!text || !room?.connected) return;
+    lastSent.current = text;
+    clearSayFailed();
     send({ type: 'say', room: room.room, text });
     setReply('');
   };
+
+  // a message the bridge couldn't send goes back in the box so it isn't lost
+  useEffect(() => {
+    if (sayFailed && sayFailed.room === active) setReply((current) => current || lastSent.current);
+  }, [sayFailed, active]);
 
   const toggleCam = (handle: string) => {
     if (!room) return;
@@ -124,6 +132,12 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
               />
               <button type="submit" disabled={!room.connected || !reply.trim()}><Send size={15} /> Send</button>
             </form>
+            {sayFailed?.room === room.room ? <p className="chat-hint stumble-warn">{sayFailed.message}</p> : null}
+            {isGuest(room.self) ? (
+              <p className="chat-hint stumble-warn">
+                You&apos;re in as a guest ({room.self}). Sign in {room.browser ? 'in your browser' : "in the bridge’s Chrome window"}, then rejoin this room.
+              </p>
+            ) : null}
           </div>
           <aside className="chat-stats stumble-side">
             <h3>Cams</h3>
@@ -139,7 +153,8 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
                 ))}
               </ul>
             )}
-            <p>{room.reopening ? 'StumbleChat dropped the room. Reopening…' : room.connected ? 'Connected. The bridge answers the site’s pings in its own Chrome window.' : 'Opening the room…'}</p>
+            {room.self && !isGuest(room.self) ? <p>Signed in as <strong>{room.self}</strong>.</p> : null}
+            <p>{room.reopening ? 'StumbleChat dropped the room. Reopening…' : room.connected ? (room.browser ? 'Connected through your own browser tab. Keep that tab visible so it answers the site’s pings.' : 'Connected. The bridge answers the site’s pings in its own Chrome window.') : 'Opening the room…'}</p>
             {room.watching.length ? (
               <button type="button" onClick={() => send({ type: 'watch', room: room.room, handles: [] })}><VideoOff size={14} /> Stop all cams</button>
             ) : null}

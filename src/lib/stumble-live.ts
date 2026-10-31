@@ -7,7 +7,7 @@ const MAX_LINES = 600;
 
 export type StumbleLine = { room: string; kind: 'chat' | 'self' | 'system'; nick: string | null; text: string; ts: number };
 export type StumbleCam = { handle: string; nick: string | null };
-export type StumbleLiveRoom = { room: string; self: string | null; connected: boolean; reopening: boolean; cams: StumbleCam[]; watching: string[] };
+export type StumbleLiveRoom = { room: string; self: string | null; connected: boolean; reopening: boolean; cams: StumbleCam[]; watching: string[]; browser: boolean };
 
 export type BridgeMessage =
   | { type: 'hello'; chrome: boolean; rooms: StumbleLiveRoom[]; history: StumbleLine[] }
@@ -15,6 +15,7 @@ export type BridgeMessage =
   | { type: 'chat'; line: StumbleLine }
   | { type: 'frame'; room: string; handle: string; data: string }
   | { type: 'status'; chrome: boolean }
+  | { type: 'say-failed'; room: string; message: string }
   | { type: 'error'; message: string };
 
 const str = (v: unknown) => (typeof v === 'string' ? v : null);
@@ -41,7 +42,7 @@ function parseRooms(v: unknown): StumbleLiveRoom[] {
         })
       : [];
     const watching = Array.isArray(r.watching) ? r.watching.map(String) : [];
-    return [{ room, self: str(r.self), connected: r.connected === true, reopening: r.reopening === true, cams, watching }];
+    return [{ room, self: str(r.self), connected: r.connected === true, reopening: r.reopening === true, cams, watching, browser: r.browser === true }];
   });
 }
 
@@ -64,6 +65,10 @@ export function parseBridgeMessage(raw: string): BridgeMessage | null {
       return room && handle && data?.startsWith('data:image/jpeg;base64,') ? { type: 'frame', room, handle, data } : null;
     }
     case 'status': return { type: 'status', chrome: m.chrome === true };
+    case 'say-failed': {
+      const room = str(m.room);
+      return room ? { type: 'say-failed', room, message: str(m.message) ?? 'Message not sent' } : null;
+    }
     case 'error': return { type: 'error', message: str(m.message) ?? 'bridge error' };
     default: return null;
   }
@@ -85,3 +90,6 @@ export function isMention(line: StumbleLine, nicks: (string | null | undefined)[
     return new RegExp(`(^|[^\\w])@?${escapeRe(n)}(?![\\w])`, 'i').test(line.text);
   });
 }
+
+/** StumbleChat names un-nicknamed visitors guest-<number>. */
+export const isGuest = (nick: string | null | undefined) => /^guest-\d+$/i.test(nick ?? '');

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { AtSign, Maximize2, Minus, Radio, Volume2, VolumeX, X } from 'lucide-react';
+import { AtSign, ExternalLink, Globe, Maximize2, Minus, Power, Radio, Volume2, VolumeX, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useStumbleLive } from '../lib/stumble-live-store';
 import { ChatFeed } from './StumbleLive';
@@ -22,7 +22,8 @@ export function StumbleWidget({ onOpen }: { onOpen: () => void }) {
   const room = rooms.find((r) => r.room === active) ?? null;
   const roomLines = useMemo(() => lines.filter((l) => l.room === active).slice(-80), [lines, active]);
 
-  if (link !== 'online' || !chrome || !prefs.visible) return null;
+  // rooms fed in from your own browser count even when the bridge's Chrome window is closed
+  if (link !== 'online' || !(chrome || rooms.length) || !prefs.visible) return null;
 
   const x = prefs.x < 0 ? window.innerWidth - WIDTH - 16 : Math.min(prefs.x, window.innerWidth - 120);
   const y = Math.max(8, Math.min(prefs.y, window.innerHeight - 120));
@@ -102,28 +103,74 @@ export function StumbleToasts({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-// Taskbar icon: green while StumbleChat is open, grey when the bridge is idle (click
-// to open it), dark when the bridge isn't installed or running. Red badge = unread mentions.
+// Taskbar icon: green while a room is open, grey when the bridge is idle, dark when the
+// bridge isn't installed or running. Red badge = unread mentions. Click for the manage menu.
 export function StumbleTrayButton() {
-  const { link, chrome, rooms, unread, prefs, setPrefs, clearUnread, openChrome } = useStumbleLive();
+  const { link, chrome, rooms, unread, prefs, setPrefs, clearUnread, openChrome, send, showLive } = useStumbleLive();
+  const [menu, setMenu] = useState(false);
+  const wrap = useRef<HTMLSpanElement>(null);
   useEffect(() => { useStumbleLive.getState().connect(); }, []);
+  useEffect(() => {
+    if (!menu) return;
+    const away = (e: PointerEvent) => { if (!wrap.current?.contains(e.target as Node)) setMenu(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false); };
+    window.addEventListener('pointerdown', away);
+    window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('pointerdown', away); window.removeEventListener('keydown', esc); };
+  }, [menu]);
+
   const online = link === 'online';
-  const live = online && chrome;
+  const live = online && (chrome || rooms.length > 0);
   const title = !online
-    ? 'StumbleChat bridge not running (set it up once with: thanatos stumble install)'
-    : !chrome
-      ? 'StumbleChat is closed. Click to open it'
-      : `${rooms.length} room${rooms.length === 1 ? '' : 's'} open. Click to ${prefs.visible ? 'hide' : 'show'} the widget`;
+    ? 'StumbleChat bridge not running. Click for details'
+    : `StumbleChat bridge: ${rooms.length} room${rooms.length === 1 ? '' : 's'} open. Click to manage`;
+  const act = (fn: () => void) => () => { fn(); setMenu(false); };
+
   return (
-    <button type="button" className={clsx('tb-stumble', live && 'live', online && !chrome && 'idle')} title={title} aria-label={title}
-      onClick={() => {
-        if (!online) return;
-        if (!chrome) { openChrome(); setPrefs({ visible: true, collapsed: false }); return; }
-        setPrefs({ visible: !prefs.visible, collapsed: false });
-        clearUnread();
-      }}>
-      <Radio size={14} />
-      {unread ? <span className="stumble-badge">{unread}</span> : null}
-    </button>
+    <span className="tb-stumble-wrap" ref={wrap}>
+      <button type="button" className={clsx('tb-stumble', live && 'live', online && !live && 'idle')} title={title} aria-label={title}
+        aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>
+        <Radio size={14} />
+        {unread ? <span className="stumble-badge">{unread}</span> : null}
+      </button>
+      {menu ? (
+        <div className="stumble-menu" role="menu">
+          <header>
+            <i className={clsx('stumble-dot', online ? (live ? 'on' : 'wait') : 'off')} />
+            <strong>StumbleChat bridge</strong>
+            <span>{!online ? 'not running' : live ? 'online' : 'idle'}</span>
+          </header>
+          {!online ? (
+            <p className="chat-hint">
+              {link === 'connecting' ? 'Looking for the bridge…' : <>Set it up once in the Shell tab: <code>thanatos stumble install</code></>}
+            </p>
+          ) : (
+            <>
+              <ul className="stumble-menu-rooms">
+                {rooms.map((r) => (
+                  <li key={r.room}>
+                    <i className={clsx('stumble-dot', r.connected ? 'on' : r.reopening ? 'wait' : 'off')} />
+                    <span>{r.room}</span>
+                    <small>{r.browser ? 'your browser' : 'bridge Chrome'}</small>
+                    <button type="button" title={`Leave ${r.room}`} onClick={() => send({ type: 'leave', room: r.room })}><X size={12} /></button>
+                  </li>
+                ))}
+              </ul>
+              {!rooms.length ? <p className="chat-hint">No rooms open. Join one in your browser (tap extension) or from Stumble Live.</p> : null}
+              <button type="button" role="menuitem" onClick={act(() => { showLive(rooms[0]?.room); clearUnread(); })}><ExternalLink size={13} /> Open Stumble Live</button>
+              <button type="button" role="menuitem" onClick={act(() => { setPrefs({ visible: !prefs.visible, collapsed: false }); clearUnread(); })}>
+                <Maximize2 size={13} /> {prefs.visible ? 'Hide' : 'Show'} the widget
+              </button>
+              <button type="button" role="menuitem" onClick={() => setPrefs({ sound: !prefs.sound })}>
+                {prefs.sound ? <Volume2 size={13} /> : <VolumeX size={13} />} Mention sound: {prefs.sound ? 'on' : 'off'}
+              </button>
+              <button type="button" role="menuitem" onClick={act(() => (chrome ? send({ type: 'stop' }) : openChrome()))}>
+                {chrome ? <Power size={13} /> : <Globe size={13} />} {chrome ? 'Close' : 'Open'} the bridge's Chrome window
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+    </span>
   );
 }

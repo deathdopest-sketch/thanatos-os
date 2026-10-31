@@ -30,7 +30,20 @@ thanatos stumble log
 
 Stumble Live has a reply box that types into the room's own chat box. The widget on the desktop only reads chat.
 
+The bridge also clicks StumbleChat's VERIFY button for you, closes a second tab opened on a room it already holds (the site blocks the same login twice), and reloads a room that hasn't connected after 30 seconds.
+
 If StumbleChat closes the room or the connection drops, the bridge reopens the room after 30 seconds. If you close a room's tab yourself, the bridge leaves that room.
+
+## Use your own browser instead (tap)
+
+The bridge's Chrome runs inside Linux, so it has no camera and can't share your screen. To use ChromeOS Chrome for the room instead:
+
+1. In ChromeOS Chrome open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and pick `thanatos-os/native/stumble-bridge/extension` (under **Linux files** in the picker).
+2. Open the room on stumblechat.com in that Chrome and sign in there. Reload the room tab if it was already open.
+
+The extension wraps the page's WebSocket before the room's own scripts run. Its background worker copies what the socket receives to the bridge on `ws://127.0.0.1:4180/tap` (the worker holds the connection, so the site's content-security-policy can't block it). Stumble Live then shows that room's chat and cams and its reply box works, while the room stays in your tab, so StumbleChat gets your real camera and screen share. If the bridge's own Chrome has the same room open, it closes that tab, since the site blocks the same login twice. Tapped rooms aren't saved or reopened. Keep the tab visible, or Chrome may throttle it and the site drop you.
+
+Only the extension (or a stumblechat.com page) can connect to `/tap`; web pages on other sites are refused.
 
 ## Settings (environment variables)
 
@@ -60,3 +73,5 @@ The end-to-end test checks that:
 - rooms are saved
 - the bridge starts idle, opens Chrome on request, and reopens saved rooms after Chrome is closed and opened again
 - the control endpoints refuse requests without the Thanatos header
+
+`test/tap.test.js` (no Chrome needed) checks that a tapped room streams chat, takes replies and cam picks, isn't saved, and that other origins are refused.

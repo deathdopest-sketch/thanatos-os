@@ -55,6 +55,7 @@ const CONFIG = {
 };
 
 const ROOM_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+const isTapUrl = (url) => /^\/tap(\?|$)/.test(url || '');
 const log = (...a) => console.log(new Date().toISOString(), '[stumble-bridge]', ...a);
 
 // Runs inside each room tab: report the cam tiles on the page and capture the
@@ -104,6 +105,7 @@ class Bridge {
     this.browser = null;
     this.home = null;      // the StumbleChat tab you sign in on
     this.starting = null;  // promise while Chrome is opening
+    this.shuttingDown = false; // the process is stopping: tabs closing now aren't you leaving rooms
   }
 
   // ── browser ──────────────────────────────────────────────────────────────
@@ -143,8 +145,20 @@ class Bridge {
     await this.browser?.close().catch(() => {});
   }
 
+  /** Tell Chrome the last run ended cleanly and to open a blank tab, so it doesn't restore old (duplicate) room tabs. */
+  calmProfile() {
+    const file = path.join(this.config.profile, 'Default', 'Preferences');
+    try {
+      const prefs = JSON.parse(fs.readFileSync(file, 'utf8'));
+      prefs.profile = { ...prefs.profile, exit_type: 'Normal', exited_cleanly: true };
+      prefs.session = { ...prefs.session, restore_on_startup: 5 };
+      fs.writeFileSync(file, JSON.stringify(prefs));
+    } catch { /* first run: no profile yet */ }
+  }
+
   async launch() {
     fs.mkdirSync(this.config.profile, { recursive: true });
+    this.calmProfile();
     this.browser = await puppeteer.launch({
       headless: false,
       executablePath: this.config.browserPath ?? defaultBrowser(),
@@ -178,8 +192,30 @@ class Bridge {
       this.broadcastRooms();
       this.onChromeClosed?.();
     });
-    // First tab: StumbleChat itself, for signing in.
-    const [home] = await browser.pages();
+    // StumbleChat won't run the same login twice in a room, so a second tab for a
+    // room the bridge already holds blocks the bridge's own tab. Close it (or send
+    // the home tab back to the front page).
+    const guard = (target) => {
+      if (target.type() !== 'page') return;
+      const match = target.url().match(/\/room\/([^/?#]+)/);
+      if (!match) return;
+      const room = decodeURIComponent(match[1]);
+      const entry = [...this.rooms.entries()].find(([name]) => name.toLowerCase() === room.toLowerCase())?.[1];
+      if (!entry?.page || entry.page.target() === target) return;
+      target.page().then(async (page) => {
+        if (!page) return;
+        if (page === this.home) await page.goto(this.config.stumbleUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
+        else await page.close().catch(() => {});
+        this.broadcast({ type: 'error', message: `${room} is already open in the bridge. Use Stumble Live for it; a second tab on the same login blocks the first.` });
+      }).catch(() => {});
+    };
+    browser.on('targetcreated', guard);
+    browser.on('targetchanged', guard);
+    // Chrome restores last session's tabs, which would be duplicate room tabs the
+    // site blocks. Give it a moment to open them, then keep one tab.
+    await new Promise((r) => setTimeout(r, 1500));
+    const [home, ...restored] = await browser.pages();
+    for (const extra of restored) await extra.close().catch(() => {});
     this.home = home || await browser.newPage();
     await this.home.goto(this.config.stumbleUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
   }
@@ -238,13 +274,13 @@ class Bridge {
       // shouldn't wipe your saved rooms. Chrome can be slow to disconnect, so also
       // check whether any tabs are left: none means the whole window is closing.
       setTimeout(async () => {
-        if (!this.chromeOpen) return;
+        if (this.shuttingDown || !this.chromeOpen) return;
         const open = await this.browser.pages().catch(() => []);
         if (!this.chromeOpen || open.length === 0) return;
         if (this.rooms.get(room) === entry && entry.page === page && !entry.reopening) {
           clearTimeout(entry.reopenTimer);
           this.rooms.delete(room);
-          this.saveRooms();
+          this.saveRooms(true);
           this.broadcastRooms();
         }
       }, 3000);
@@ -253,6 +289,43 @@ class Bridge {
     await page.goto(`${this.config.stumbleUrl}/room/${encodeURIComponent(room)}`, { waitUntil: 'domcontentloaded', timeout: 45000 })
       .catch((e) => log(room, 'load failed:', e.message));
     if (entry.watch.size) await this.pushWatch(entry);
+    this.watchRoom(room, entry, page);
+  }
+
+  /**
+   * StumbleChat puts a VERIFY button on the room page before it connects. Wait for it
+   * and click it. If the room still hasn't connected after 30s, reload once; after
+   * another 30s, tell the desktop.
+   */
+  async watchRoom(room, entry, page) {
+    const current = () => this.rooms.get(room) === entry && entry.page === page && !page.isClosed();
+    // a real mouse click through the DevTools protocol: the site ignores script-made clicks
+    const click = async () => {
+      try {
+        const button = await page.$('#interact');
+        if (!button || !(await button.evaluate((b) => !b.disabled && !!b.offsetParent))) return false;
+        await page.bringToFront(); // the site only accepts the click on a visible tab
+        await button.click();
+        brought = true;
+        return true;
+      } catch { return false; }
+    };
+    let brought = false;
+    let reloaded = false;
+    for (let waited = 0; current() && waited < 60; waited++) {
+      if (entry.socketIds.size > 0) break;
+      await click();
+      await new Promise((r) => setTimeout(r, 1000));
+      if (waited === 29 && !reloaded && entry.socketIds.size === 0) {
+        reloaded = true;
+        log(room, 'not connected after 30s; reloading once');
+        await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      }
+    }
+    if (brought && this.home && !this.home.isClosed()) await this.home.bringToFront().catch(() => {});
+    if (current() && entry.socketIds.size === 0) {
+      this.broadcast({ type: 'error', message: `${room} isn't connecting. Check its tab in the bridge's Chrome window (a sign-in or verify step may be waiting).` });
+    }
   }
 
   scheduleReopen(room, entry, why) {
@@ -279,7 +352,8 @@ class Bridge {
     if (!entry) return;
     this.rooms.delete(room);
     clearTimeout(entry.reopenTimer);
-    this.saveRooms();
+    this.saveRooms(true);
+    if (entry.tap) { entry.tap.send(JSON.stringify({ type: 'tap-stop' })); entry.tap.close(); }
     await entry.page?.close().catch(() => {});
     this.broadcastRooms();
   }
@@ -296,15 +370,29 @@ class Bridge {
   async say(room, text) {
     const entry = this.rooms.get(room);
     const line = String(text).replace(/\s+/g, ' ').trim().slice(0, 1000);
-    if (!entry?.page || !line) return;
+    if (!line) return;
+    if (entry?.tap) {
+      if (entry.tap.readyState !== 1 || entry.socketIds.size === 0) throw new Error(`your browser isn't connected to that room`);
+      entry.tap.send(JSON.stringify({ type: 'tap-say', text: line }));
+      return;
+    }
+    if (!entry?.page) throw new Error(`you're not in that room`);
     const box = await entry.page.$('textarea#textarea');
-    if (!box) throw new Error(`${room}: the chat box isn't on the page yet`);
+    if (!box) throw new Error(`the chat box isn't on the page yet`);
     await box.click();
     await box.type(line);
     await entry.page.keyboard.press('Enter');
+    await new Promise((r) => setTimeout(r, 600));
+    // a message the site accepted clears the box
+    const left = await box.evaluate((el) => el.value).catch(() => '');
+    if (left) {
+      await box.evaluate((el) => { el.value = ''; }).catch(() => {});
+      throw new Error('StumbleChat did not accept the message');
+    }
   }
 
   async pushWatch(entry) {
+    if (entry.tap) { if (entry.tap.readyState === 1) entry.tap.send(JSON.stringify({ type: 'tap-watch', handles: [...entry.watch] })); return; }
     await entry.page?.evaluate((list) => { window.__thanatosWatch = list; }, [...entry.watch]).catch(() => {});
   }
 
@@ -317,10 +405,12 @@ class Bridge {
     } catch { return []; }
   }
 
-  saveRooms() {
+  /** An empty list is only written when you left the last room yourself, never as a side effect of Chrome or the service stopping. */
+  saveRooms(allowEmpty = false) {
+    if (!allowEmpty && this.rooms.size === 0) return;
     try {
       fs.mkdirSync(path.dirname(this.config.roomsFile), { recursive: true });
-      fs.writeFileSync(this.config.roomsFile, JSON.stringify([...this.rooms.keys()]));
+      fs.writeFileSync(this.config.roomsFile, JSON.stringify([...this.rooms].filter(([, e]) => !e.tap).map(([room]) => room)));
     } catch (e) { log('could not save rooms:', e.message); }
   }
 
@@ -334,6 +424,7 @@ class Bridge {
       reopening: !!e.reopenTimer,
       cams: e.cams,
       watching: [...e.watch],
+      browser: !!e.tap, // true when the room is open in your own browser
     }));
   }
 
@@ -352,11 +443,63 @@ class Bridge {
       else if (msg.type === 'stop') await this.stopChrome();
       else if (msg.type === 'join' && typeof msg.room === 'string') await this.openRoom(msg.room.trim());
       else if (msg.type === 'leave' && typeof msg.room === 'string') await this.closeRoom(msg.room);
-      else if (msg.type === 'say' && typeof msg.room === 'string' && typeof msg.text === 'string') await this.say(msg.room, msg.text);
+      else if (msg.type === 'say' && typeof msg.room === 'string' && typeof msg.text === 'string') {
+        await this.say(msg.room, msg.text).catch((e) => {
+          ws.send(JSON.stringify({ type: 'say-failed', room: msg.room, message: `Couldn't send to ${msg.room}: ${e.message}` }));
+        });
+      }
       else if (msg.type === 'watch' && typeof msg.room === 'string') await this.setWatch(msg.room, msg.handles);
     } catch (e) {
       ws.send(JSON.stringify({ type: 'error', message: e.message }));
     }
+  }
+
+  /**
+   * A StumbleChat tab in your own browser (the tap userscript) feeds its room in: raw
+   * frames, cam tiles and cam pictures. The room then lives in that tab, so it uses
+   * your browser's camera and screen share, and the bridge's own Chrome tab for it is dropped.
+   */
+  acceptTap(ws) {
+    let entry = null;
+    let nextId = 0;
+    ws.on('message', async (raw) => {
+      let msg;
+      try { msg = JSON.parse(String(raw)); } catch { return; }
+      if (!entry) {
+        if (msg.type !== 'tap-hello' || typeof msg.room !== 'string' || !ROOM_RE.test(msg.room)) return ws.close();
+        const room = msg.room;
+        const old = this.rooms.get(room);
+        entry = { page: null, cdp: null, tap: ws, state: new RoomState(room), socketIds: new Set(), cams: [], watch: new Set(), reopenTimer: null };
+        this.rooms.set(room, entry); // set before any await: the tab's next frames arrive right behind its hello
+        if (old) { clearTimeout(old.reopenTimer); old.tap?.close(); }
+        this.saveRooms(true);
+        this.broadcastRooms();
+        await old?.page?.close().catch(() => {});
+        log(room, 'now open in your own browser');
+        return;
+      }
+      const room = entry.state.room;
+      if (msg.type === 'tap-ws' && Number.isInteger(msg.id)) {
+        if (msg.open) entry.socketIds.add(`tap${msg.id}`); else entry.socketIds.delete(`tap${msg.id}`);
+        this.broadcastRooms();
+      } else if (msg.type === 'tap-frame' && typeof msg.payload === 'string') {
+        for (const line of entry.state.ingest(msg.payload)) this.broadcast({ type: 'chat', line });
+      } else if (msg.type === 'tap-cams' && Array.isArray(msg.cams)) {
+        entry.cams = msg.cams.filter((c) => c && c.handle != null).map((c) => ({ handle: String(c.handle), nick: String(c.nick || '').slice(0, 64) }));
+        for (const c of entry.cams) if (c.nick) entry.state.rememberNick(c.handle, c.nick);
+        this.broadcastRooms();
+      } else if (msg.type === 'tap-image') {
+        const handle = String(msg.handle);
+        if (entry.watch.has(handle) && typeof msg.data === 'string' && msg.data.startsWith('data:image/jpeg')) this.broadcast({ type: 'frame', room, handle, data: msg.data });
+      }
+    });
+    ws.on('close', () => {
+      if (!entry || this.rooms.get(entry.state.room) !== entry) return;
+      this.rooms.delete(entry.state.room);
+      this.broadcastRooms();
+      log(entry.state.room, 'your browser left the room');
+    });
+    ws.send(JSON.stringify({ type: 'tap-ready' }));
   }
 
   listen() {
@@ -374,11 +517,12 @@ class Bridge {
     });
     const wss = new WebSocketServer({
       server,
-      maxPayload: 64 * 1024,
-      // Only the Thanatos desktop may read your rooms.
-      verifyClient: ({ origin }) => this.config.origins.includes(origin),
+      maxPayload: 256 * 1024,
+      // Only the Thanatos desktop may read your rooms, and only the tap extension (or a StumbleChat page) may feed one in.
+      verifyClient: ({ origin, req }) => isTapUrl(req.url) ? (origin === this.config.stumbleUrl || /^chrome-extension:\/\//.test(origin || '')) : this.config.origins.includes(origin),
     });
-    wss.on('connection', (ws) => {
+    wss.on('connection', (ws, req) => {
+      if (isTapUrl(req.url)) return this.acceptTap(ws);
       this.clients.add(ws);
       ws.on('close', () => this.clients.delete(ws));
       ws.on('message', (raw) => this.handle(ws, String(raw)));
@@ -394,9 +538,12 @@ class Bridge {
 
 let stopping = false;
 
+// A tab closing mid-launch can reject inside a plugin; that shouldn't take the service down.
+process.on('unhandledRejection', (e) => log('ignored error:', e?.message || e));
+
 async function main() {
   const bridge = new Bridge(CONFIG);
-  const stop = async () => { stopping = true; await bridge.browser?.close().catch(() => {}); process.exit(0); };
+  const stop = async () => { stopping = true; bridge.shuttingDown = true; await bridge.browser?.close().catch(() => {}); process.exit(0); };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
   await bridge.listen();

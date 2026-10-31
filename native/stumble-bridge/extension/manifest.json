@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Thanatos Stumble tap",
+  "version": "1.0.0",
+  "description": "Feeds the StumbleChat room open in this browser to the Thanatos bridge (chat, cams, reply box).",
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    { "matches": ["https://stumblechat.com/room/*"], "js": ["hook.js"], "run_at": "document_start", "world": "MAIN" },
+    { "matches": ["https://stumblechat.com/room/*"], "js": ["relay.js"], "run_at": "document_start" }
+  ]
+}
