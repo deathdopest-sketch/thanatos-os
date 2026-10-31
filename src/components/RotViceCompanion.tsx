@@ -70,7 +70,8 @@ export function RotViceCompanion() {
   function say(text: string, anim?: 'action' | 'react' | 'happy') {
     if (sayRef.current) clearTimeout(sayRef.current);
     setBubble(text);
-    if (anim && spriteRef.current) spriteRef.current.play(anim);
+    // the sprite has no 'happy' animation; friends coming online use the lively one
+    if (anim && spriteRef.current) spriteRef.current.play(anim === 'happy' ? 'action' : anim);
     sayRef.current = setTimeout(() => { setBubble(null); clearAlert(); }, 5000);
   }
 
