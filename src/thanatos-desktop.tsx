@@ -86,6 +86,7 @@ import { useStumbleLive } from './lib/stumble-live-store';
 import { useDesktopBus } from './lib/desktop-bus';
 import ShellTerminal from './components/ShellTerminal';
 import { parseRotvicePets, useRotvicePets } from './lib/rotvice-pets';
+import { RotViceCompanion } from './components/RotViceCompanion';
 import { normalizePath } from './lib/vfs';
 import { useVfsListing } from './lib/use-vfs-listing';
 
@@ -2245,7 +2246,9 @@ function openChatWindow(url: string) {
 }
 
 function RotViceApp() {
-  const setPets = useRotvicePets((s) => s.setPets);
+  const setPets      = useRotvicePets((s) => s.setPets);
+  const setLoggedIn  = useRotvicePets((s) => s.setLoggedIn);
+  const pushAlert    = useRotvicePets((s) => s.pushAlert);
   const [frameKey, setFrameKey] = useState(0);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [stats, setStats] = useState<MumbleChatStats>({
@@ -2254,31 +2257,61 @@ function RotViceApp() {
     status: 'idle', message: 'Sign in inside the frame. Polls every 30s.'
   });
 
+  // Track previous online-friends list so we can diff it each poll
+  const prevOnline = useRef<string[]>([]);
+
   useEffect(() => {
     const h = (e: MessageEvent) => {
       if (e.origin !== ROTVICE_ORIGIN) return;
-      const p = e.data as MumbleChatPayload;
+      const p = e.data as MumbleChatPayload & { kind?: unknown; text?: unknown };
+
+      // Real-time event from RotVice (raid, friend, challenge)
+      if (p.type === 'mumblechat:event') {
+        const kind = String(p.kind || '');
+        const text = String(p.text || '');
+        if (!text) return;
+        const anim = kind === 'raid' || kind === 'challenge' ? 'react' : kind === 'friend' ? 'happy' : undefined;
+        pushAlert(text, anim);
+        return;
+      }
+
       if (p.type !== 'mumblechat:stats') return;
-      if (p.loggedIn === false) setPets([]);
-      else if ('pets' in p) setPets(parseRotvicePets(p.pets, ROTVICE_ORIGIN));
+
+      const loggedIn = typeof p.loggedIn === 'boolean' ? p.loggedIn : null;
+      setLoggedIn(loggedIn);
+
+      if (loggedIn === false) {
+        setPets([]);
+      } else if ('pets' in p) {
+        setPets(parseRotvicePets(p.pets, ROTVICE_ORIGIN));
+      }
+
+      // Diff online friends: anyone newly online gets a companion alert
+      const nowOnline = Array.isArray(p.onlineFriends) ? p.onlineFriends.map(String) : [];
+      const prev = prevOnline.current;
+      for (const name of nowOnline) {
+        if (!prev.includes(name)) pushAlert(`${name} came online`, 'happy');
+      }
+      prevOnline.current = nowOnline;
+
       setStats({
-        loggedIn: typeof p.loggedIn === 'boolean' ? p.loggedIn : null,
+        loggedIn,
         userId: typeof p.userId === 'number' ? p.userId : null,
         username: typeof p.username === 'string' ? p.username : null,
         displayName: typeof p.displayName === 'string' ? p.displayName : null,
         avatarUrl: typeof p.avatarUrl === 'string' ? p.avatarUrl : null,
         unreadPms: typeof p.unreadPms === 'number' ? p.unreadPms : null,
-        onlineFriends: Array.isArray(p.onlineFriends) ? p.onlineFriends.map(String) : [],
+        onlineFriends: nowOnline,
         offlineFriends: Array.isArray(p.offlineFriends) ? p.offlineFriends.map(String) : [],
         totalFriends: typeof p.totalFriends === 'number' ? p.totalFriends : null,
         lastUpdated: new Date().toLocaleTimeString(),
-        status: p.loggedIn === false ? 'unavailable' : 'online',
-        message: p.loggedIn === false ? 'Not logged in.' : 'Live stats received.'
+        status: loggedIn === false ? 'unavailable' : 'online',
+        message: loggedIn === false ? 'Not logged in.' : 'Live stats received.'
       });
     };
     window.addEventListener('message', h);
     return () => window.removeEventListener('message', h);
-  }, [setPets]);
+  }, [setPets, setLoggedIn, pushAlert]);
 
   const requestStats = useCallback(() => {
     setStats((s) => ({ ...s, status: 'checking', message: frameLoaded ? 'Requesting stats...' : 'Waiting for frame...' }));
@@ -2964,6 +2997,7 @@ export function ThanatosDesktop() {
           onShowDesktop={() => setWindows((ws) => ws.map((w) => ({ ...w, minimized: true })))} />
       ) : null}
       {booted ? <DesktopPets visible={windows.some((w) => w.app.id === 'rotvice')} /> : null}
+      {booted ? <RotViceCompanion /> : null}
       {booted ? <StumbleWidget onOpen={openStumbleLive} /> : null}
       {booted ? <StumbleToasts onOpen={openStumbleLive} /> : null}
       <AnimatePresence>{startOpen ? <StartMenu onLaunch={launch} onClose={() => setStartOpen(false)} /> : null}</AnimatePresence>

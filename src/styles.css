@@ -5076,6 +5076,103 @@ body {
   font-size: 0.86rem;
 }
 
+/* ─── RotVice Companion ─────────────────────────────────────────── */
+.rv-companion {
+  position: fixed;
+  z-index: 5600; /* above windows, below nothing */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  cursor: grab;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7));
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.rv-companion:active { cursor: grabbing; }
+
+.rv-companion canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: rgba(4, 1, 6, 0.72);
+  border: 1px solid rgba(255, 35, 96, 0.25);
+  border-radius: 6px;
+}
+
+.rv-companion.offline canvas {
+  border-color: rgba(143, 133, 125, 0.2);
+}
+
+.rv-companion-bubble {
+  position: absolute;
+  bottom: calc(100% - 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 130px;
+  max-width: 220px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(8, 3, 5, 0.94);
+  border: 1px solid rgba(255, 35, 96, 0.4);
+  color: #f7eee9;
+  font-size: 0.78rem;
+  font-family: 'JetBrains Mono', monospace;
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+  animation: rv-bubble-in 0.18s ease forwards;
+  pointer-events: none;
+}
+
+.rv-companion-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(255, 35, 96, 0.4);
+}
+
+@keyframes rv-bubble-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.rv-companion-footer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: rgba(143, 133, 125, 0.8);
+  white-space: nowrap;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rv-companion.offline .rv-companion-footer {
+  color: rgba(143, 133, 125, 0.55);
+}
+
+.rv-companion-dot {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ccc;
+}
+
+.rv-companion-dot.on {
+  background: rgb(var(--curse-primary));
+  box-shadow: 0 0 5px rgba(var(--curse-primary), 0.6);
+}
+
 /* ─── Appearance: custom background, effect layer, settings panel ─── */
 .custom-bg {
   position: absolute;

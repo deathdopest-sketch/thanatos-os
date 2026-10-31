@@ -11,13 +11,30 @@ export type DesktopPet = {
   spriteUrl: string;
 };
 
-type PetStore = { pets: DesktopPet[]; setPets: (pets: DesktopPet[]) => void };
+export type CompanionAlert = { id: number; text: string; anim?: string };
+
+type PetStore = {
+  pets: DesktopPet[];
+  loggedIn: boolean | null;
+  alerts: CompanionAlert[];
+  setPets: (pets: DesktopPet[]) => void;
+  setLoggedIn: (v: boolean | null) => void;
+  pushAlert: (text: string, anim?: string) => void;
+  clearAlert: () => void;
+};
+
+let alertSeq = 0;
 
 // Last pet list RotVice reported. Kept outside the RotVice window so pets stay on
 // the desktop while that window is minimized (minimizing unmounts the app).
 export const useRotvicePets = create<PetStore>((set) => ({
   pets: [],
+  loggedIn: null,
+  alerts: [],
   setPets: (pets) => set({ pets }),
+  setLoggedIn: (loggedIn) => set({ loggedIn }),
+  pushAlert: (text, anim) => set((s) => ({ alerts: [{ id: ++alertSeq, text, anim }, ...s.alerts].slice(0, 5) })),
+  clearAlert: () => set((s) => ({ alerts: s.alerts.slice(1) })),
 }));
 
 /** Validate the bridge payload's pets and resolve sprite paths against the RotVice origin. */
