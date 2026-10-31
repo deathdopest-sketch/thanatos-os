@@ -31,6 +31,7 @@ const { WebSocketServer } = require('ws');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const { RoomState } = require('./room-state');
+const { ensureSecret, verifyDesktop } = require('../lib/desktop-check');
 
 puppeteer.use(StealthPlugin());
 
@@ -372,11 +373,19 @@ class Bridge {
       }
       return reply(404, {});
     });
+    // Only the Thanatos desktop may read your rooms: the right Origin, served by
+    // the real Thanatos web server (native/lib/desktop-check.js).
+    const secret = this.config.secret ?? ensureSecret();
     const wss = new WebSocketServer({
       server,
       maxPayload: 64 * 1024,
-      // Only the Thanatos desktop may read your rooms.
-      verifyClient: ({ origin }) => this.config.origins.includes(origin),
+      verifyClient: ({ origin }, done) => {
+        if (!this.config.origins.includes(origin)) return done(false, 401);
+        verifyDesktop(origin, secret).then((ok) => {
+          if (!ok) log(`refused ${origin}: the server there isn't the Thanatos desktop`);
+          done(ok, 401);
+        });
+      },
     });
     wss.on('connection', (ws) => {
       this.clients.add(ws);

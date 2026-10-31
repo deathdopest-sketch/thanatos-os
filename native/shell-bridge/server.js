@@ -8,9 +8,10 @@
  * `thanatos`, git, npm and everything else work from the desktop.
  *
  * Only the Thanatos desktop can connect: the server binds to 127.0.0.1, requires
- * the page's Origin to be the desktop's, and requires a localhost Host header
- * (which blocks DNS-rebinding tricks). Browsers set both headers themselves, so
- * other websites can't open a shell here.
+ * the page's Origin to be the desktop's and a localhost Host header (which blocks
+ * DNS-rebinding tricks), and checks that the server at that Origin really is
+ * Thanatos (native/lib/desktop-check.js), so another project previewed on the
+ * same port can't open a shell either.
  *
  * Messages in:  {type:'input', data}  {type:'resize', cols, rows}
  * Messages out: {type:'output', data}  {type:'exit', code}
@@ -24,12 +25,14 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { StringDecoder } = require('string_decoder');
 const { WebSocketServer } = require('ws');
+const { ensureSecret, verifyDesktop } = require('../lib/desktop-check');
 
 const CONFIG = {
   port: Number(process.env.THANATOS_SHELL_PORT || 4181),
   origins: (process.env.THANATOS_ORIGINS || 'http://localhost:4173,http://127.0.0.1:4173')
     .split(',').map((s) => s.trim()).filter(Boolean),
   maxSessions: 8,
+  secret: undefined, // defaults to ~/.local/share/thanatos/desktop-secret
 };
 
 const log = (...a) => console.log(new Date().toISOString(), '[shell-bridge]', ...a);
@@ -43,11 +46,22 @@ function allowed(origins, port, { origin, req }) {
 
 function listen(config = CONFIG) {
   let sessions = 0;
+  const secret = config.secret ?? ensureSecret();
   const server = http.createServer((req, res) => {
     res.writeHead(req.url === '/health' ? 200 : 404, { 'Content-Type': 'application/json' });
     res.end(req.url === '/health' ? JSON.stringify({ ok: true, sessions }) : '{}');
   });
-  const wss = new WebSocketServer({ server, maxPayload: 256 * 1024, verifyClient: (info) => allowed(config.origins, server.address().port, info) });
+  const wss = new WebSocketServer({
+    server,
+    maxPayload: 256 * 1024,
+    verifyClient: (info, done) => {
+      if (!allowed(config.origins, server.address().port, info)) return done(false, 401);
+      verifyDesktop(info.origin, secret).then((ok) => {
+        if (!ok) log(`refused ${info.origin}: the server there isn't the Thanatos desktop`);
+        done(ok, 401);
+      });
+    },
+  });
 
   wss.on('connection', (ws, req) => {
     if (sessions >= config.maxSessions) { ws.close(1013, 'too many terminals open'); return; }

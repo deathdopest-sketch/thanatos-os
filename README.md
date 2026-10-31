@@ -89,7 +89,9 @@ Minimizing a window keeps it running, so a shell, a video or a chat carries on i
 
 The chat bridge was built to be safe to leave running:
 
-- **It's only reachable from your own machine.** It listens on `127.0.0.1` and accepts connections only from the Thanatos desktop's own page.
+- **It's only reachable from your own machine.** The bridges listen on `127.0.0.1` and accept connections only from the Thanatos desktop's own page.
+- **Impostors are refused.** Before accepting a connection, the bridges check that the server behind the page really is Thanatos, using a secret only it can read. So another project previewed on the same port can't use them.
+- **Only the desktop's own code runs.** The built desktop ships a Content Security Policy that blocks any script it didn't bundle itself.
 - **Thanatos never handles your credentials.** You sign in to each site yourself, in its own browser window. Your login lives in the bridge's own Chrome profile on your machine.
 - **Nothing is recorded.** Cam frames are only streamed to your screen, never saved. Chat history is a 300-line buffer in memory.
 

@@ -22,8 +22,9 @@ A shell is powerful, so the server only accepts:
 - connections on **127.0.0.1**, so nothing on your network can reach it
 - the **Thanatos desktop's Origin** (`THANATOS_ORIGINS`, by default the desktop on `localhost:4173`)
 - a **localhost Host header**, which blocks DNS-rebinding tricks
+- a **desktop check**: the server at that Origin must answer with the secret in `~/.local/share/thanatos/desktop-secret` (readable by you only). Thanatos's own web server serves it; see `vite.config.ts` and `native/lib/desktop-check.js`. Another project previewed on port 4173 while Thanatos is down can't answer, so it's refused.
 
-Browsers set the Origin and Host headers themselves, so no other website can open a shell here.
+Browsers set the Origin and Host headers themselves, so no other website can open a shell here. The built desktop also ships a Content Security Policy that only runs its own scripts, so injected text can't run code either.
 
 ## Tests
 

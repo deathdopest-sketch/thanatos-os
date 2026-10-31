@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: Desktop (lint, types, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build # tsc --noEmit + vite build
+      - name: Built page carries the Content Security Policy
+        run: grep -q 'http-equiv="Content-Security-Policy"' dist/index.html
+
+  shell-bridge:
+    name: Terminal service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: native/shell-bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: python3 -m py_compile pty-host.py
+      - run: npm test
+
+  stumble-bridge:
+    name: StumbleChat bridge
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: native/stumble-bridge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci # also downloads Puppeteer's Chrome
+      - run: npm test
+      # Ubuntu 24.04 blocks the unprivileged namespaces Chrome's sandbox needs.
+      - name: Allow Chrome's sandbox on the runner
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: End-to-end (real Chrome against a fake StumbleChat)
+        run: STUMBLE_E2E=1 xvfb-run -a node --test test/bridge.e2e.test.js
+
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax
+        run: |
+          for f in native/bin/thanatos native/bin/thanatos-run native/install/*.sh; do bash -n "$f"; done
+      - name: shellcheck
+        run: shellcheck -S warning native/bin/thanatos native/bin/thanatos-run native/install/*.sh
