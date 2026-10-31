@@ -47,11 +47,23 @@ function waitFor(ws, pred, ms = 20000) {
   });
 }
 
+// Stands in for Thanatos's web server, which answers the bridge's secret check.
+function fakeDesktop(secret) {
+  const desk = http.createServer((req, res) => {
+    if (req.url === '/.well-known/thanatos-desktop') res.end(secret);
+    else { res.statusCode = 404; res.end(); }
+  });
+  return new Promise((resolve) => desk.listen(0, '127.0.0.1', () => resolve(desk)));
+}
+
 test('streams chat and watched cams from a room to the desktop', { skip: !process.env.STUMBLE_E2E, timeout: 90000 }, async () => {
   const fake = await fakeStumble();
+  const secret = 'c'.repeat(64);
+  const desk = await fakeDesktop(secret);
+  const DESKTOP = `http://localhost:${desk.address().port}`;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'stumble-bridge-'));
   const bridge = new Bridge({
-    stumbleUrl: `http://127.0.0.1:${fake.port}`, port: 0, origins: ['http://localhost:4173'],
+    stumbleUrl: `http://127.0.0.1:${fake.port}`, port: 0, origins: [DESKTOP], secret,
     profile: path.join(tmp, 'profile'), roomsFile: path.join(tmp, 'rooms.json'), camFps: 5, reopenDelayMs: 1000,
   });
   const server = await bridge.listen();
@@ -68,7 +80,7 @@ test('streams chat and watched cams from a room to the desktop', { skip: !proces
     const evil = new WS(`ws://127.0.0.1:${port}`, { origin: 'https://evil.example' });
     await new Promise((resolve) => { evil.on('error', resolve); evil.on('unexpected-response', resolve); });
 
-    const ws = new WS(`ws://127.0.0.1:${port}`, { origin: 'http://localhost:4173' });
+    const ws = new WS(`ws://127.0.0.1:${port}`, { origin: DESKTOP });
     const hello = await waitFor(ws, (m) => m.type === 'hello');
     assert.equal(hello.chrome, false);
     ws.send(JSON.stringify({ type: 'start' }));
@@ -113,5 +125,6 @@ test('streams chat and watched cams from a room to the desktop', { skip: !proces
     await bridge.browser?.close().catch(() => {});
     server.close();
     fake.server.close();
+    desk.close();
   }
 });

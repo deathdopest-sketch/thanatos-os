@@ -5,10 +5,24 @@ const http = require('http');
 const WS = require('ws');
 const { listen } = require('../server');
 
-const ORIGIN = 'http://localhost:4173';
+const SECRET = 'a'.repeat(64);
+let ORIGIN = '';
 
-async function start() {
-  const server = await listen({ port: 0, origins: [ORIGIN], maxSessions: 2 });
+// Stands in for Thanatos's web server: answers the secret check (or doesn't).
+function fakeDesktop(answer) {
+  const desk = http.createServer((req, res) => {
+    if (req.url === '/.well-known/thanatos-desktop' && answer !== null) { res.end(answer); return; }
+    res.statusCode = 404; res.end();
+  });
+  return new Promise((resolve) => desk.listen(0, '127.0.0.1', () => resolve(desk)));
+}
+
+async function start({ answer = SECRET } = {}) {
+  const desk = await fakeDesktop(answer);
+  ORIGIN = `http://localhost:${desk.address().port}`;
+  const server = await listen({ port: 0, origins: [ORIGIN], maxSessions: 2, secret: SECRET });
+  const close = server.close.bind(server);
+  server.close = () => { close(); desk.close(); };
   return { server, port: server.address().port };
 }
 
@@ -74,6 +88,18 @@ test('only the Thanatos desktop on localhost can connect', async () => {
     assert.equal(health.ok, true);
   } finally {
     server.close();
+  }
+});
+
+test('a different server on the desktop address is refused', async () => {
+  // e.g. another project's `vite preview` on port 4173 while Thanatos is down
+  for (const answer of [null, 'b'.repeat(64)]) {
+    const { server, port } = await start({ answer });
+    try {
+      assert.equal(await refused(connect(port)), 401);
+    } finally {
+      server.close();
+    }
   }
 });
 
