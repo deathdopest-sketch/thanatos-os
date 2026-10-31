@@ -33,6 +33,7 @@ type StumbleLiveState = {
   lines: StumbleLine[];
   frames: Record<string, string>;
   error: string | null;
+  sayFailed: { room: string; message: string } | null;
   toasts: StumbleToast[];
   unread: number;
   prefs: WidgetPrefs;
@@ -44,6 +45,7 @@ type StumbleLiveState = {
   openChrome: () => void;
   dismissToast: (id: number) => void;
   clearUnread: () => void;
+  clearSayFailed: () => void;
   setPrefs: (p: Partial<WidgetPrefs>) => void;
   setFocusRoom: (room: string | null) => void;
   /** Open the Stumble Live window, optionally on a room. */
@@ -100,6 +102,7 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
   lines: [],
   frames: {},
   error: null,
+  sayFailed: null,
   toasts: [],
   unread: 0,
   prefs: loadPrefs(),
@@ -129,6 +132,7 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
         else if (m.type === 'frame') set((s) => ({ frames: { ...s.frames, [`${m.room}/${m.handle}`]: m.data } }));
         else if (m.type === 'status') set({ chrome: m.chrome });
         else if (m.type === 'error') set({ error: m.message });
+        else if (m.type === 'say-failed') set({ sayFailed: { room: m.room, message: m.message } });
         else if (m.type === 'chat') {
           const { rooms, prefs } = get();
           const self = rooms.find((r) => r.room === m.line.room)?.self;
@@ -158,6 +162,7 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   clearUnread: () => set({ unread: 0 }),
+  clearSayFailed: () => set({ sayFailed: null }),
   setPrefs: (p) => {
     const prefs = { ...get().prefs, ...p };
     set({ prefs });

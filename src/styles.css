@@ -5020,6 +5020,35 @@ body {
   cursor: pointer;
 }
 
+.tb-stumble-wrap { position: relative; display: inline-grid; }
+.stumble-menu {
+  position: absolute;
+  right: -8px;
+  bottom: calc(100% + 16px);
+  width: 270px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid rgba(var(--curse-primary), 0.35);
+  border-radius: 8px;
+  background: rgba(8, 3, 12, 0.98);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.6);
+  z-index: 7000;
+}
+.stumble-menu header { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; }
+.stumble-menu header span { margin-left: auto; color: #6c6470; font-size: 0.74rem; }
+.stumble-menu > button {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px;
+  border: 0; border-radius: 5px; background: transparent; color: rgb(var(--ui-text)); font: inherit; font-size: 0.82rem; text-align: left; cursor: pointer;
+}
+.stumble-menu > button:hover { background: rgba(var(--curse-primary), 0.2); }
+.stumble-menu-rooms { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.stumble-menu-rooms li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 0.82rem; }
+.stumble-menu-rooms li small { margin-left: auto; color: #6c6470; }
+.stumble-menu-rooms li button { border: 0; background: transparent; color: #6c6470; cursor: pointer; display: grid; place-items: center; }
+.stumble-menu-rooms li button:hover { color: #ff7aa0; }
+.stumble-menu .chat-hint { margin: 2px 8px 6px; }
 .tb-stumble.live { color: #5effa4; }
 .tb-stumble.idle { color: rgba(var(--ui-text), 0.7); }
 .tb-stumble .stumble-badge { position: absolute; top: -7px; right: -9px; min-width: 15px; height: 15px; font-size: 0.62rem; }
