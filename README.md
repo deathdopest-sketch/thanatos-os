@@ -171,6 +171,63 @@ Open **Settings** from the start menu:
 
 If you don't like the result, **Theme → Reset look to defaults** puts everything back. Your uploads and saved themes are kept.
 
+---
+
+## Getting started on Windows (WSL2)
+
+This is the same setup as Chromebook but on Windows, using WSL2 instead of Crostini. You need Windows 11 (21H2 or later) with WSL2 and an Ubuntu distribution installed.
+
+### Step 1: Open WSL
+
+Open **Ubuntu** from the Start menu (or run `wsl` in PowerShell). Everything below goes in that terminal.
+
+### Step 2: Install Thanatos
+
+```bash
+sudo apt-get install -y git
+git clone https://github.com/deathdopest-sketch/thanatos-os.git ~/thanatos-os
+~/thanatos-os/native/install/wsl.sh
+```
+
+If the installer tells you systemd wasn't active, run `wsl --shutdown` from PowerShell, reopen Ubuntu, and run the installer a second time. It's safe to re-run.
+
+**When it finishes, close the terminal and open a new one** so the `thanatos` command is on your PATH.
+
+Check it worked:
+
+```bash
+thanatos doctor
+```
+
+### Step 3: Open the desktop
+
+```bash
+thanatos web open
+```
+
+The desktop opens in your Windows browser at `http://localhost:4173`. To install it as an app in Chrome: **⋮ → Cast, save and share → Install page as app**.
+
+### Step 4–6
+
+Same as Chromebook from here. Follow [Step 4](#step-4-open-stumblechat-and-sign-in) onwards above.
+
+### Troubleshooting (WSL)
+
+**`thanatos: command not found`**
+The installer didn't finish, or the terminal was opened before it did. Close the terminal, open a new one, and try again. If it still fails, re-run `~/thanatos-os/native/install/wsl.sh`.
+
+**`wsl --shutdown` then services still won't start**
+Check that `/etc/wsl.conf` contains `systemd=true` under `[boot]`. If the file was created during the install, the section looks like:
+```
+[boot]
+systemd=true
+```
+
+**The desktop opens but the StumbleChat bridge won't launch Chrome**
+WSL2 supports GUI apps (WSLg) on Windows 11, but if your setup is missing it, Chrome can't open. Run `thanatos stumble log` to see the error. Installing [WSLg](https://github.com/microsoft/wslg) or updating Windows usually fixes it.
+
+---
+
 ### Updating
 
 ```bash
