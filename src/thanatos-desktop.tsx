@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { Rnd } from 'react-rnd';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -39,49 +39,51 @@ import { BootLayer, BloodDrips, QuoteFlash, SkullFlash } from './components/Desk
 import { readStoredValue, writeStoredValue, WINDOW_STATE_KEY } from './lib/storage';
 import type { OpenWindow, ThanatosTheme, AccessSession } from './lib/desktop-types';
 
-// App imports
-import { TerminalApp } from './components/apps/TerminalApp';
-import { FileManagerApp } from './components/apps/FileManagerApp';
-import { CalculatorApp } from './components/apps/CalculatorApp';
-import { NotesApp } from './components/apps/NotesApp';
-import { MarkdownApp } from './components/apps/MarkdownApp';
-import { CalendarApp } from './components/apps/CalendarApp';
-import { WeatherApp } from './components/apps/WeatherApp';
-import { MailApp } from './components/apps/MailApp';
-import { SettingsApp } from './components/apps/SettingsApp';
-import { TaskManagerApp } from './components/apps/TaskManagerApp';
-import { PaintApp } from './components/apps/PaintApp';
-import { CameraApp } from './components/apps/CameraApp';
-import { VoiceRecorderApp } from './components/apps/VoiceRecorderApp';
-import { VideoPlayerApp } from './components/apps/VideoPlayerApp';
-import { ImageViewerApp } from './components/apps/ImageViewerApp';
-import { MusicPlayerApp } from './components/apps/MusicPlayerApp';
-import { PdfViewerApp } from './components/apps/PdfViewerApp';
-import { AudioVisualizerApp } from './components/apps/AudioVisualizerApp';
-import { CodeStudioApp } from './components/apps/CodeStudioApp';
-import { CompilerApp } from './components/apps/CompilerApp';
-import { GitClientApp } from './components/apps/GitClientApp';
-import { ApiClientApp } from './components/apps/ApiClientApp';
-import { JsonFormatterApp } from './components/apps/JsonFormatterApp';
-import { DiffCheckerApp } from './components/apps/DiffCheckerApp';
-import { HexEditorApp } from './components/apps/HexEditorApp';
-import { HashGeneratorApp } from './components/apps/HashGeneratorApp';
-import { PasswordGeneratorApp } from './components/apps/PasswordGeneratorApp';
-import { Base64App } from './components/apps/Base64App';
-import { RegexTesterApp } from './components/apps/RegexTesterApp';
-import { QrCodeApp } from './components/apps/QrCodeApp';
-import { MinifierApp } from './components/apps/MinifierApp';
-import { LoremIpsumApp } from './components/apps/LoremIpsumApp';
-import { UrlShortenerApp } from './components/apps/UrlShortenerApp';
-import { ManPagesApp } from './components/apps/ManPagesApp';
-import { NetworkMonitorApp } from './components/apps/NetworkMonitorApp';
-import { ColorPickerApp } from './components/apps/ColorPickerApp';
-import { RemoteControlApp } from './components/apps/RemoteControlApp';
-import { RotViceApp } from './components/apps/RotViceApp';
-import { StumbleChatApp, loadStumbleSettings } from './components/apps/StumbleChatApp';
-import { ChatCommonApp } from './components/apps/ChatCommonApp';
-import { SlotMachineApp } from './components/apps/SlotMachineApp';
-import { LoveDiceApp } from './components/apps/LoveDiceApp';
+import { loadStumbleSettings } from './lib/stumble-settings';
+
+// App imports — lazy-loaded so each app is its own chunk
+const TerminalApp = lazy(() => import('./components/apps/TerminalApp').then((m) => ({ default: m.TerminalApp })));
+const FileManagerApp = lazy(() => import('./components/apps/FileManagerApp').then((m) => ({ default: m.FileManagerApp })));
+const CalculatorApp = lazy(() => import('./components/apps/CalculatorApp').then((m) => ({ default: m.CalculatorApp })));
+const NotesApp = lazy(() => import('./components/apps/NotesApp').then((m) => ({ default: m.NotesApp })));
+const MarkdownApp = lazy(() => import('./components/apps/MarkdownApp').then((m) => ({ default: m.MarkdownApp })));
+const CalendarApp = lazy(() => import('./components/apps/CalendarApp').then((m) => ({ default: m.CalendarApp })));
+const WeatherApp = lazy(() => import('./components/apps/WeatherApp').then((m) => ({ default: m.WeatherApp })));
+const MailApp = lazy(() => import('./components/apps/MailApp').then((m) => ({ default: m.MailApp })));
+const SettingsApp = lazy(() => import('./components/apps/SettingsApp').then((m) => ({ default: m.SettingsApp })));
+const TaskManagerApp = lazy(() => import('./components/apps/TaskManagerApp').then((m) => ({ default: m.TaskManagerApp })));
+const PaintApp = lazy(() => import('./components/apps/PaintApp').then((m) => ({ default: m.PaintApp })));
+const CameraApp = lazy(() => import('./components/apps/CameraApp').then((m) => ({ default: m.CameraApp })));
+const VoiceRecorderApp = lazy(() => import('./components/apps/VoiceRecorderApp').then((m) => ({ default: m.VoiceRecorderApp })));
+const VideoPlayerApp = lazy(() => import('./components/apps/VideoPlayerApp').then((m) => ({ default: m.VideoPlayerApp })));
+const ImageViewerApp = lazy(() => import('./components/apps/ImageViewerApp').then((m) => ({ default: m.ImageViewerApp })));
+const MusicPlayerApp = lazy(() => import('./components/apps/MusicPlayerApp').then((m) => ({ default: m.MusicPlayerApp })));
+const PdfViewerApp = lazy(() => import('./components/apps/PdfViewerApp').then((m) => ({ default: m.PdfViewerApp })));
+const AudioVisualizerApp = lazy(() => import('./components/apps/AudioVisualizerApp').then((m) => ({ default: m.AudioVisualizerApp })));
+const CodeStudioApp = lazy(() => import('./components/apps/CodeStudioApp').then((m) => ({ default: m.CodeStudioApp })));
+const CompilerApp = lazy(() => import('./components/apps/CompilerApp').then((m) => ({ default: m.CompilerApp })));
+const GitClientApp = lazy(() => import('./components/apps/GitClientApp').then((m) => ({ default: m.GitClientApp })));
+const ApiClientApp = lazy(() => import('./components/apps/ApiClientApp').then((m) => ({ default: m.ApiClientApp })));
+const JsonFormatterApp = lazy(() => import('./components/apps/JsonFormatterApp').then((m) => ({ default: m.JsonFormatterApp })));
+const DiffCheckerApp = lazy(() => import('./components/apps/DiffCheckerApp').then((m) => ({ default: m.DiffCheckerApp })));
+const HexEditorApp = lazy(() => import('./components/apps/HexEditorApp').then((m) => ({ default: m.HexEditorApp })));
+const HashGeneratorApp = lazy(() => import('./components/apps/HashGeneratorApp').then((m) => ({ default: m.HashGeneratorApp })));
+const PasswordGeneratorApp = lazy(() => import('./components/apps/PasswordGeneratorApp').then((m) => ({ default: m.PasswordGeneratorApp })));
+const Base64App = lazy(() => import('./components/apps/Base64App').then((m) => ({ default: m.Base64App })));
+const RegexTesterApp = lazy(() => import('./components/apps/RegexTesterApp').then((m) => ({ default: m.RegexTesterApp })));
+const QrCodeApp = lazy(() => import('./components/apps/QrCodeApp').then((m) => ({ default: m.QrCodeApp })));
+const MinifierApp = lazy(() => import('./components/apps/MinifierApp').then((m) => ({ default: m.MinifierApp })));
+const LoremIpsumApp = lazy(() => import('./components/apps/LoremIpsumApp').then((m) => ({ default: m.LoremIpsumApp })));
+const UrlShortenerApp = lazy(() => import('./components/apps/UrlShortenerApp').then((m) => ({ default: m.UrlShortenerApp })));
+const ManPagesApp = lazy(() => import('./components/apps/ManPagesApp').then((m) => ({ default: m.ManPagesApp })));
+const NetworkMonitorApp = lazy(() => import('./components/apps/NetworkMonitorApp').then((m) => ({ default: m.NetworkMonitorApp })));
+const ColorPickerApp = lazy(() => import('./components/apps/ColorPickerApp').then((m) => ({ default: m.ColorPickerApp })));
+const RemoteControlApp = lazy(() => import('./components/apps/RemoteControlApp').then((m) => ({ default: m.RemoteControlApp })));
+const RotViceApp = lazy(() => import('./components/apps/RotViceApp').then((m) => ({ default: m.RotViceApp })));
+const StumbleChatApp = lazy(() => import('./components/apps/StumbleChatApp').then((m) => ({ default: m.StumbleChatApp })));
+const ChatCommonApp = lazy(() => import('./components/apps/ChatCommonApp').then((m) => ({ default: m.ChatCommonApp })));
+const SlotMachineApp = lazy(() => import('./components/apps/SlotMachineApp').then((m) => ({ default: m.SlotMachineApp })));
+const LoveDiceApp = lazy(() => import('./components/apps/LoveDiceApp').then((m) => ({ default: m.LoveDiceApp })));
 
 // ─── window ───────────────────────────────────────────────────────────────────
 
@@ -248,7 +250,7 @@ function DesktopWindow({ openWindow, active, openWindows, theme, session, onSess
           <button type="button" aria-label="Close" onClick={onClose}><X size={15} /></button>
         </div>
       </div>
-      <div className="window-content"><AppContent app={openWindow.app} openWindows={openWindows} theme={theme} session={session} onSessionChange={onSessionChange} onThemeChange={onThemeChange} /></div>
+      <div className="window-content"><Suspense fallback={<div className="app-loading" />}><AppContent app={openWindow.app} openWindows={openWindows} theme={theme} session={session} onSessionChange={onSessionChange} onThemeChange={onThemeChange} /></Suspense></div>
     </Rnd>
   );
 }
