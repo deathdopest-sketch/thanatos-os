@@ -273,6 +273,8 @@ stumble() {
           [ -d "$dir/node_modules" ] || stumble install
           running || {
             export THANATOS_ORIGINS="${THANATOS_ORIGINS:-http://localhost:$WEB_PORT,http://127.0.0.1:$WEB_PORT}"
+            # Load optional stumble env file (CDP mode, port overrides, etc.)
+            [ -f "$HOME/.local/share/thanatos/stumble.env" ] && set -a && . "$HOME/.local/share/thanatos/stumble.env" && set +a
             mkdir -p "$DATA"
             (cd "$dir" && setsid bash -c 'echo $$ > "$1"; exec node bridge.js' _ "$DATA/stumble.pid" >"$DATA/stumble.log" 2>&1 < /dev/null &)
           }
@@ -296,7 +298,44 @@ stumble() {
     log)
       if has_unit "$STUMBLE_UNIT"; then journalctl --user -u "$STUMBLE_UNIT" -n 50 -f
       else tail -n 50 -f "$DATA/stumble.log"; fi ;;
-    *) die "usage: thanatos stumble install|start|stop|status|log" ;;
+    cdp)
+      # CDP attach mode: bridge connects to YOUR Windows Chrome instead of launching its own.
+      # Your camera and screen share work because StumbleChat runs in your real browser.
+      # Launch Chrome first with:  chrome.exe --remote-debugging-port=9222
+      local env_file="$HOME/.local/share/thanatos/stumble.env"
+      case "${2:-status}" in
+        on)
+          # Resolve the Windows host IP — in WSL2 NAT mode, 'localhost' is the WSL VM.
+          local win_ip
+          win_ip=$(powershell.exe -Command "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { \$_.IPAddress -notlike '169.*' -and \$_.IPAddress -ne '127.0.0.1' } | Sort-Object PrefixLength -Descending | Select-Object -First 1 -ExpandProperty IPAddress" 2>/dev/null | tr -d '\r\n')
+          [ -z "$win_ip" ] && win_ip=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
+          [ -z "$win_ip" ] && win_ip=$(awk '/nameserver/{print $2; exit}' /etc/resolv.conf 2>/dev/null)
+          [ -z "$win_ip" ] && win_ip="localhost"
+          local cdp_url="http://${win_ip}:9222"
+          mkdir -p "$(dirname "$env_file")"
+          grep -qF 'STUMBLE_CDP_URL' "$env_file" 2>/dev/null \
+            && sed -i "s|^STUMBLE_CDP_URL=.*|STUMBLE_CDP_URL=${cdp_url}|" "$env_file" \
+            || echo "STUMBLE_CDP_URL=${cdp_url}" >> "$env_file"
+          say "CDP mode ON — bridge will attach to Chrome at ${cdp_url}"
+          say "Make sure Chrome is running with: --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0"
+          if has_unit "$STUMBLE_UNIT"; then systemctl --user daemon-reload && systemctl --user restart "$STUMBLE_UNIT" && say "service restarted"; fi ;;
+        off)
+          if [ -f "$env_file" ]; then
+            sed -i '/^STUMBLE_CDP_URL=/d' "$env_file"
+            say "CDP mode OFF — bridge will use its own Chrome window"
+            if has_unit "$STUMBLE_UNIT"; then systemctl --user daemon-reload && systemctl --user restart "$STUMBLE_UNIT" && say "service restarted"; fi
+          else
+            say "CDP mode was already off"
+          fi ;;
+        status)
+          if grep -qF 'STUMBLE_CDP_URL' "$env_file" 2>/dev/null; then
+            say "CDP mode: ON  ($(grep 'STUMBLE_CDP_URL' "$env_file"))"
+          else
+            say "CDP mode: OFF  (using bridge's own Chrome)"
+          fi ;;
+        *) die "usage: thanatos stumble cdp on|off|status" ;;
+      esac ;;
+    *) die "usage: thanatos stumble install|start|stop|status|log|cdp" ;;
   esac
 }
 

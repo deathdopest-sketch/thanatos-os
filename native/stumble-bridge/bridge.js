@@ -34,6 +34,16 @@ const { RoomState } = require('./room-state');
 
 puppeteer.use(StealthPlugin());
 
+// Load ~/.local/share/thanatos/stumble.env if present, so STUMBLE_CDP_URL and other
+// overrides are picked up regardless of how this process was started (service, shell, direct node).
+try {
+  const envFile = path.join(os.homedir(), '.local', 'share', 'thanatos', 'stumble.env');
+  for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)=(.*)$/);
+    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].trim();
+  }
+} catch { /* file absent or unreadable — that's fine */ }
+
 const DATA_DIR = path.join(os.homedir(), '.local', 'share', 'thanatos');
 
 // Chrome for Testing has no ARM Linux build; ARM Chromebooks use Debian's Chromium.
@@ -51,6 +61,7 @@ const CONFIG = {
   roomsFile: process.env.STUMBLE_ROOMS_FILE || path.join(DATA_DIR, 'stumble-rooms.json'),
   camFps: Math.min(15, Math.max(1, Number(process.env.STUMBLE_CAM_FPS || 5))),
   reopenDelayMs: Number(process.env.STUMBLE_REOPEN_MS || 30000),
+  cdpUrl: process.env.STUMBLE_CDP_URL || null,  // e.g. http://localhost:9222 to attach to your own Chrome
   browserPath: defaultBrowser(),
 };
 
@@ -122,7 +133,11 @@ class Bridge {
       try {
         await this.launch();
         this.broadcast({ type: 'status', chrome: true });
-        for (const room of this.savedRooms()) await this.openRoom(room).catch((e) => log(room, e.message));
+        if (this.config.cdpUrl) {
+          await this.scanExistingTabs();
+        } else {
+          for (const room of this.savedRooms()) await this.openRoom(room).catch((e) => log(room, e.message));
+        }
         await this.showHome();
       } finally {
         this.starting = null;
@@ -131,8 +146,30 @@ class Bridge {
     return this.starting;
   }
 
+  /** CDP attach mode: find every stumblechat.com/room/* tab already open and attach to it. */
+  async scanExistingTabs() {
+    const pages = await this.browser.pages().catch(() => []);
+    for (const page of pages) {
+      const m = page.url().match(/\/room\/([^/?#]+)/i);
+      if (!m) continue;
+      const room = decodeURIComponent(m[1]);
+      if (this.rooms.has(room)) continue;
+      log(room, 'found existing tab — attaching');
+      await this.openRoom(room, page).catch((e) => log(room, 'scan attach failed:', e.message));
+    }
+    if (this.rooms.size === 0) log('no open StumbleChat tabs found — open a room in your browser then use Stumble Live to join it');
+  }
+
   async showHome() {
     if (!this.chromeOpen) return;
+    if (this.config.cdpUrl) {
+      // In attach mode we don't own any tabs — just bring the first StumbleChat tab
+      // to the front so the user can see it. Don't open or navigate anything.
+      const pages = await this.browser.pages().catch(() => []);
+      const sc = pages.find((p) => p.url().includes('stumblechat'));
+      if (sc) await sc.bringToFront().catch(() => {});
+      return;
+    }
     if (!this.home || this.home.isClosed()) {
       this.home = await this.browser.newPage();
       await this.home.goto(this.config.stumbleUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
@@ -157,28 +194,40 @@ class Bridge {
   }
 
   async launch() {
-    fs.mkdirSync(this.config.profile, { recursive: true });
-    this.calmProfile();
-    this.browser = await puppeteer.launch({
-      headless: false,
-      executablePath: this.config.browserPath ?? defaultBrowser(),
-      userDataDir: this.config.profile,   // keeps your StumbleChat login between runs
-      defaultViewport: null,
-      args: [
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--autoplay-policy=no-user-gesture-required',
-        // keep hidden tabs/windows fully awake so the site's pings are answered
-        '--disable-background-timer-throttling',
-        '--disable-renderer-backgrounding',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-background-media-suspend',
-        '--disable-features=IntensiveWakeUpThrottling,CalculateNativeWinOcclusion',
-        '--window-size=1280,860',
-        // Chrome refuses to run as root without this (containers, CI)
-        ...(process.getuid?.() === 0 ? ['--no-sandbox'] : []),
-      ],
-    });
+    if (this.config.cdpUrl) {
+      log(`attaching to existing Chrome at ${this.config.cdpUrl}`);
+      try {
+        this.browser = await puppeteer.connect({
+          browserURL: this.config.cdpUrl,
+          defaultViewport: null,
+        });
+        log('attached to Chrome successfully');
+      } catch (e) {
+        log(`CDP attach failed: ${e.message}`);
+        throw e;
+      }
+    } else {
+      fs.mkdirSync(this.config.profile, { recursive: true });
+      this.calmProfile();
+      this.browser = await puppeteer.launch({
+        headless: false,
+        executablePath: this.config.browserPath ?? defaultBrowser(),
+        userDataDir: this.config.profile,   // keeps your StumbleChat login between runs
+        defaultViewport: null,
+        args: [
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--autoplay-policy=no-user-gesture-required',
+          '--disable-background-timer-throttling',
+          '--disable-renderer-backgrounding',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-background-media-suspend',
+          '--disable-features=IntensiveWakeUpThrottling,CalculateNativeWinOcclusion',
+          '--window-size=1280,860',
+          ...(process.getuid?.() === 0 ? ['--no-sandbox'] : []),
+        ],
+      });
+    }
     const browser = this.browser;
     browser.on('disconnected', () => {
       if (this.browser !== browser) return;
@@ -211,8 +260,15 @@ class Bridge {
     };
     browser.on('targetcreated', guard);
     browser.on('targetchanged', guard);
-    // Chrome restores last session's tabs, which would be duplicate room tabs the
-    // site blocks. Give it a moment to open them, then keep one tab.
+
+    if (this.config.cdpUrl) {
+      // Attach mode: don't touch the user's existing tabs. Just record that we're connected.
+      log('attached to Chrome — your existing StumbleChat tabs will be used');
+      return;
+    }
+
+    // Own-Chrome mode: Chrome restores last session's tabs, which would be duplicate room
+    // tabs the site blocks. Give it a moment to open them, then keep one tab.
     await new Promise((r) => setTimeout(r, 1500));
     const [home, ...restored] = await browser.pages();
     for (const extra of restored) await extra.close().catch(() => {});
@@ -220,19 +276,40 @@ class Bridge {
     await this.home.goto(this.config.stumbleUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
   }
 
-  async openRoom(room) {
+  // existingPage: a page already on stumblechat.com/room/xxx (CDP attach mode scan)
+  async openRoom(room, existingPage = null) {
     if (!ROOM_RE.test(room)) throw new Error(`bad room name: ${room}`);
     if (this.rooms.has(room)) return;
     if (!this.chromeOpen) { await this.start(); if (this.rooms.has(room)) return; }
     const entry = { page: null, cdp: null, state: new RoomState(room), socketIds: new Set(), cams: [], watch: new Set(), reopenTimer: null };
     this.rooms.set(room, entry);
-    this.saveRooms();
-    await this.attach(room, entry);
+    if (!this.config.cdpUrl) this.saveRooms();
+    await this.attach(room, entry, existingPage);
     this.broadcastRooms();
   }
 
-  async attach(room, entry) {
-    const page = await this.browser.newPage();
+  async attach(room, entry, existingPage = null) {
+    const cdpMode = !!this.config.cdpUrl;
+    let page;
+    let alreadyLoaded = false;
+
+    if (existingPage) {
+      // Handed an existing tab (from scanExistingTabs or a join request on an open tab)
+      page = existingPage;
+      alreadyLoaded = true;
+    } else if (cdpMode) {
+      // Join requested from the desktop: look for an existing tab first
+      const pages = await this.browser.pages().catch(() => []);
+      const found = pages.find((p) => {
+        const m = p.url().match(/\/room\/([^/?#]+)/i);
+        return m && decodeURIComponent(m[1]).toLowerCase() === room.toLowerCase();
+      });
+      if (found) { page = found; alreadyLoaded = true; }
+      else { page = await this.browser.newPage(); }
+    } else {
+      page = await this.browser.newPage();
+    }
+
     entry.page = page;
     entry.socketIds.clear();
     entry.cams = [];
@@ -241,12 +318,18 @@ class Bridge {
       try { entry.cams = JSON.parse(json).filter((c) => c && c.handle); } catch { return; }
       for (const c of entry.cams) if (c.nick) entry.state.rememberNick(c.handle, c.nick);
       this.broadcastRooms();
-    });
+    }).catch(() => {});
     await page.exposeFunction('__thanatosFrame', (handle, data) => {
       if (!entry.watch.has(handle) || typeof data !== 'string' || !data.startsWith('data:image/jpeg')) return;
       this.broadcast({ type: 'frame', room, handle, data });
-    });
-    await page.evaluateOnNewDocument(camScript, this.config.camFps);
+    }).catch(() => {});
+
+    if (alreadyLoaded) {
+      // Page is already running — inject the cam script directly
+      await page.evaluate(camScript, this.config.camFps).catch(() => {});
+    } else {
+      await page.evaluateOnNewDocument(camScript, this.config.camFps);
+    }
 
     const cdp = await page.createCDPSession();
     entry.cdp = cdp;
@@ -256,23 +339,30 @@ class Bridge {
       if (isRoomSocket(url)) entry.socketIds.add(requestId);
     });
     cdp.on('Network.webSocketFrameReceived', ({ requestId, response }) => {
-      if (!entry.socketIds.has(requestId) || response.opcode !== 1) return;
+      if (response.opcode !== 1) return;
+      // CDP attach mode: the WebSocket was opened before we attached, so we never got
+      // webSocketCreated for it. Auto-discover it from the first frame we see.
+      if (cdpMode && !entry.socketIds.has(requestId)) {
+        entry.socketIds.add(requestId);
+        log(room, `discovered live WebSocket ${requestId}`);
+      }
+      if (!entry.socketIds.has(requestId)) return;
       const lines = entry.state.ingest(response.payloadData);
       for (const line of lines) this.broadcast({ type: 'chat', line });
-      if (entry.state.closed) this.scheduleReopen(room, entry, 'closed by StumbleChat');
+      if (entry.state.closed) {
+        if (cdpMode) log(room, 'StumbleChat closed the room — reload the tab to reconnect');
+        else this.scheduleReopen(room, entry, 'closed by StumbleChat');
+      }
     });
     cdp.on('Network.webSocketClosed', ({ requestId }) => {
       if (!entry.socketIds.has(requestId)) return;
       entry.socketIds.delete(requestId);
       this.broadcastRooms();
-      if (entry.socketIds.size === 0) this.scheduleReopen(room, entry, 'connection dropped');
+      // In CDP attach mode, StumbleChat reconnects itself — don't open a new tab
+      if (!cdpMode && entry.socketIds.size === 0) this.scheduleReopen(room, entry, 'connection dropped');
     });
 
     page.on('close', () => {
-      // You closed the tab yourself: stop tracking that room. Wait a few seconds first,
-      // because closing the whole Chrome window closes every tab too, and that
-      // shouldn't wipe your saved rooms. Chrome can be slow to disconnect, so also
-      // check whether any tabs are left: none means the whole window is closing.
       setTimeout(async () => {
         if (this.shuttingDown || !this.chromeOpen) return;
         const open = await this.browser.pages().catch(() => []);
@@ -280,16 +370,21 @@ class Bridge {
         if (this.rooms.get(room) === entry && entry.page === page && !entry.reopening) {
           clearTimeout(entry.reopenTimer);
           this.rooms.delete(room);
-          this.saveRooms(true);
+          if (!cdpMode) this.saveRooms(true);
           this.broadcastRooms();
         }
       }, 3000);
     });
 
-    await page.goto(`${this.config.stumbleUrl}/room/${encodeURIComponent(room)}`, { waitUntil: 'domcontentloaded', timeout: 45000 })
-      .catch((e) => log(room, 'load failed:', e.message));
-    if (entry.watch.size) await this.pushWatch(entry);
-    this.watchRoom(room, entry, page);
+    if (alreadyLoaded) {
+      if (entry.watch.size) await this.pushWatch(entry);
+      this.broadcastRooms();
+    } else {
+      await page.goto(`${this.config.stumbleUrl}/room/${encodeURIComponent(room)}`, { waitUntil: 'domcontentloaded', timeout: 45000 })
+        .catch((e) => log(room, 'load failed:', e.message));
+      if (entry.watch.size) await this.pushWatch(entry);
+      this.watchRoom(room, entry, page);
+    }
   }
 
   /**

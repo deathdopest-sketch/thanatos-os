@@ -6,6 +6,9 @@ After=default.target sommelier@0.service sommelier-x@0.service
 Type=simple
 # Installers rewrite this path to the repo location.
 WorkingDirectory=%h/thanatos-os/native/stumble-bridge
+# Optional per-user overrides: STUMBLE_CDP_URL, STUMBLE_BRIDGE_PORT, STUMBLE_CAM_FPS, etc.
+# Created by: thanatos stumble cdp on   (attaches to your own Chrome for camera/screen share)
+EnvironmentFile=-%h/.local/share/thanatos/stumble.env
 # thanatos-run puts your fnm-managed node on PATH (services don't read ~/.bashrc).
 # Chrome needs the display; these are Crostini's defaults when the session
 # doesn't already provide them.
