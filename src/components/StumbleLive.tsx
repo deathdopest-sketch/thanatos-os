@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Radio, Send, Video, VideoOff, X } from 'lucide-react';
+import { Plus, Radio, Send, User, Video, VideoOff, X } from 'lucide-react';
 import clsx from 'clsx';
 import { MAX_WATCHED_CAMS, isGuest, isMention, type StumbleLine } from '../lib/stumble-live';
 import { useStumbleLive } from '../lib/stumble-live-store';
@@ -7,14 +7,18 @@ import { useStumbleLive } from '../lib/stumble-live-store';
 // The full view of the rooms the bridge keeps open. The connection itself lives in
 // the shared store, so closing this window doesn't drop anything.
 export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
-  const { link, chrome, rooms, lines, frames, error, sayFailed, send, focusRoom, setFocusRoom, clearUnread, clearSayFailed, openChrome } = useStumbleLive();
+  const { link, chrome, rooms, lines, frames, error, sayFailed, send, focusRoom, setFocusRoom, clearUnread, clearSayFailed, openChrome, friends, onlineFriends, addFriend, removeFriend } = useStumbleLive();
   const [active, setActive] = useState<string | null>(focusRoom);
   const [joinInput, setJoinInput] = useState('');
   const [reply, setReply] = useState('');
   const lastSent = useRef('');
 
-  // opening this app opens StumbleChat in the bridge's Chrome window (sign in there)
-  useEffect(() => { useStumbleLive.getState().openChrome(); clearUnread(); }, [clearUnread]);
+  // opening this app opens StumbleChat in the bridge's Chrome window (sign in there),
+  // but skip that if the tap extension is already feeding rooms from your own browser
+  useEffect(() => {
+    if (!useStumbleLive.getState().rooms.some((r) => r.browser)) useStumbleLive.getState().openChrome();
+    clearUnread();
+  }, [clearUnread]);
   // a toast or the widget asked to show a particular room
   useEffect(() => { if (focusRoom) { setActive(focusRoom); setFocusRoom(null); } }, [focusRoom, setFocusRoom]);
 
@@ -57,12 +61,13 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
     send({ type: 'watch', room: room.room, handles: on ? room.watching.filter((h) => h !== handle) : [...room.watching, handle] });
   };
 
-  if (link !== 'online' || !chrome) {
+  const hasTapRooms = rooms.some((r) => r.browser);
+  if (link !== 'online' || (!chrome && !hasTapRooms)) {
     return (
       <div className="chat-app">
         <div className="chat-panel chat-launch">
           <h3>Stumble Live</h3>
-          {link === 'connecting' ? <p className="chat-hint">Connecting to the StumbleChat bridge…</p>
+          {link === 'connecting' ? <p className="chat-hint">Connecting to the StumbleChat bridge...</p>
             : link === 'offline' ? (
               <>
                 <p className="chat-hint">The StumbleChat bridge isn&apos;t set up on this machine yet.</p>
@@ -95,7 +100,7 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
           </span>
         ))}
         <form className="stumble-join" onSubmit={(e) => { e.preventDefault(); join(joinInput); }}>
-          <input value={joinInput} onChange={(e) => setJoinInput(e.target.value)} list="stumble-saved-rooms" placeholder="join room…" aria-label="Room to join" />
+          <input value={joinInput} onChange={(e) => setJoinInput(e.target.value)} list="stumble-saved-rooms" placeholder="join room..." aria-label="Room to join" />
           <datalist id="stumble-saved-rooms">{unjoined.map((s) => <option key={s} value={s} />)}</datalist>
           <button type="submit"><Plus size={15} /> Join</button>
         </form>
@@ -127,7 +132,7 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
                 onChange={(e) => setReply(e.target.value)}
                 maxLength={1000}
                 disabled={!room.connected}
-                placeholder={room.connected ? `Message ${room.room} as ${room.self ?? 'you'}…` : 'Waiting for the room to connect…'}
+                placeholder={room.connected ? `Message ${room.room} as ${room.self ?? 'you'}...` : 'Waiting for the room to connect...'}
                 aria-label={`Message ${room.room}`}
               />
               <button type="submit" disabled={!room.connected || !reply.trim()}><Send size={15} /> Send</button>
@@ -135,7 +140,7 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
             {sayFailed?.room === room.room ? <p className="chat-hint stumble-warn">{sayFailed.message}</p> : null}
             {isGuest(room.self) ? (
               <p className="chat-hint stumble-warn">
-                You&apos;re in as a guest ({room.self}). Sign in {room.browser ? 'in your browser' : "in the bridge’s Chrome window"}, then rejoin this room.
+                You&apos;re in as a guest ({room.self}). Sign in {room.browser ? 'in your browser' : "in the bridge's Chrome window"}, then rejoin this room.
               </p>
             ) : null}
           </div>
@@ -154,10 +159,11 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
               </ul>
             )}
             {room.self && !isGuest(room.self) ? <p>Signed in as <strong>{room.self}</strong>.</p> : null}
-            <p>{room.reopening ? 'StumbleChat dropped the room. Reopening…' : room.connected ? (room.browser ? 'Connected through your own browser tab. Keep that tab visible so it answers the site’s pings.' : 'Connected. The bridge answers the site’s pings in its own Chrome window.') : 'Opening the room…'}</p>
+            <p>{room.reopening ? "StumbleChat dropped the room. Reopening..." : room.connected ? (room.browser ? "Connected through your own browser tab. Keep that tab visible so it answers the site's pings." : "Connected. The bridge answers the site's pings in its own Chrome window.") : "Opening the room..."}</p>
             {room.watching.length ? (
               <button type="button" onClick={() => send({ type: 'watch', room: room.room, handles: [] })}><VideoOff size={14} /> Stop all cams</button>
             ) : null}
+            <FriendsPanel friends={friends} onlineFriends={onlineFriends} addFriend={addFriend} removeFriend={removeFriend} />
           </aside>
         </div>
       ) : (
@@ -166,6 +172,44 @@ export default function StumbleLive({ savedRooms }: { savedRooms: string[] }) {
           {unjoined.map((s) => <button key={s} type="button" onClick={() => join(s)}><Plus size={15} /> {s}</button>)}
         </div>
       )}
+    </div>
+  );
+}
+
+function FriendsPanel({ friends, onlineFriends, addFriend, removeFriend }: {
+  friends: string[];
+  onlineFriends: Record<string, { room: string; since: number }>;
+  addFriend: (nick: string) => void;
+  removeFriend: (nick: string) => void;
+}) {
+  const [input, setInput] = useState('');
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nick = input.trim();
+    if (nick) { addFriend(nick); setInput(''); }
+  };
+  return (
+    <div className="stumble-friends">
+      <h3><User size={13} /> Friends</h3>
+      {friends.length === 0 ? <p className="chat-hint">No friends added.</p> : (
+        <ul>
+          {friends.map((f) => {
+            const status = onlineFriends[f.toLowerCase()];
+            return (
+              <li key={f} className="stumble-friend-row">
+                <i className={clsx('stumble-dot', status ? 'on' : 'off')} />
+                <span>{f}</span>
+                {status ? <small>{status.room}</small> : null}
+                <button type="button" aria-label={`Remove ${f}`} className="stumble-friend-remove" onClick={() => removeFriend(f)}><X size={11} /></button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <form className="stumble-friend-add" onSubmit={submit}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Add nick..." aria-label="Friend nick to add" maxLength={64} />
+        <button type="submit"><Plus size={13} /></button>
+      </form>
     </div>
   );
 }
@@ -182,7 +226,7 @@ export const ChatFeed = memo(function ChatFeed({ lines, self }: { lines: Stumble
       const el = e.currentTarget;
       pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     }}>
-      {lines.length === 0 ? <p className="chat-hint">Waiting for chat…</p> : lines.map((l, i) => (
+      {lines.length === 0 ? <p className="chat-hint">Waiting for chat...</p> : lines.map((l, i) => (
         <div key={`${l.ts}-${i}`} className={clsx('stumble-line', l.kind, isMention(l, [self]) && 'mention')}>
           <time>{new Date(l.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
           {l.kind === 'system' ? <span>{l.text}</span> : <><strong>{l.nick ?? '?'}</strong><span>{l.text}</span></>}

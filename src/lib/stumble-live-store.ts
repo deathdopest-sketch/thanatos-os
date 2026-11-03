@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import {
   STUMBLE_BRIDGE_URL, appendLines, isMention, parseBridgeMessage,
-  type StumbleLine, type StumbleLiveRoom
+  type FriendToast, type StumbleLine, type StumbleLiveRoom
 } from './stumble-live';
 
 // One connection to the StumbleChat bridge for the whole desktop session, shared by
@@ -9,12 +9,24 @@ import {
 // not in a component, so closing or minimizing a window never drops it.
 
 export type StumbleToast = { id: number; line: StumbleLine };
+export { type FriendToast };
 type Link = 'connecting' | 'online' | 'offline';
 type WidgetPrefs = { visible: boolean; collapsed: boolean; sound: boolean; x: number; y: number };
 
 const PREFS_KEY = 'thanatos.stumblelive.widget';
+const FRIENDS_KEY = 'thanatos.stumble.friends';
 const DEFAULT_PREFS: WidgetPrefs = { visible: true, collapsed: false, sound: true, x: -1, y: 64 };
 const TOAST_MS = 7000;
+
+function loadFriends(): string[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(FRIENDS_KEY) ?? '[]');
+    return Array.isArray(list) ? list.filter((s: unknown): s is string => typeof s === 'string') : [];
+  } catch { return []; }
+}
+function saveFriends(friends: string[]) {
+  try { localStorage.setItem(FRIENDS_KEY, JSON.stringify(friends)); } catch { /* storage off */ }
+}
 
 function loadPrefs(): WidgetPrefs {
   try { return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') }; } catch { return DEFAULT_PREFS; }
@@ -39,6 +51,10 @@ type StumbleLiveState = {
   prefs: WidgetPrefs;
   focusRoom: string | null;
   liveRequest: number;
+  friends: string[];
+  /** lc-nick → { room, since } for friends currently seen in a room */
+  onlineFriends: Record<string, { room: string; since: number }>;
+  friendToasts: FriendToast[];
   connect: () => void;
   send: (msg: object) => void;
   /** Ask the bridge to open its Chrome window (or bring it forward). Waits for the connection if needed. */
@@ -50,6 +66,9 @@ type StumbleLiveState = {
   setFocusRoom: (room: string | null) => void;
   /** Open the Stumble Live window, optionally on a room. */
   showLive: (room?: string) => void;
+  addFriend: (nick: string) => void;
+  removeFriend: (nick: string) => void;
+  dismissFriendToast: (id: number) => void;
 };
 
 let ws: WebSocket | null = null;
@@ -108,6 +127,9 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
   prefs: loadPrefs(),
   focusRoom: null,
   liveRequest: 0,
+  friends: loadFriends(),
+  onlineFriends: {},
+  friendToasts: [],
 
   connect: () => {
     if (started) return;
@@ -128,13 +150,22 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
         const m = parseBridgeMessage(String(e.data));
         if (!m) return;
         if (m.type === 'hello') set({ chrome: m.chrome, rooms: m.rooms, lines: appendLines([], m.history) });
-        else if (m.type === 'rooms') set({ rooms: m.rooms });
+        else if (m.type === 'rooms') {
+          const removedRooms = new Set(get().rooms.filter((r) => !m.rooms.some((nr) => nr.room === r.room)).map((r) => r.room));
+          if (removedRooms.size) {
+            const newOnline = { ...get().onlineFriends };
+            for (const [k, v] of Object.entries(newOnline)) if (removedRooms.has(v.room)) delete newOnline[k];
+            set({ rooms: m.rooms, onlineFriends: newOnline });
+          } else {
+            set({ rooms: m.rooms });
+          }
+        }
         else if (m.type === 'frame') set((s) => ({ frames: { ...s.frames, [`${m.room}/${m.handle}`]: m.data } }));
         else if (m.type === 'status') set({ chrome: m.chrome });
         else if (m.type === 'error') set({ error: m.message });
         else if (m.type === 'say-failed') set({ sayFailed: { room: m.room, message: m.message } });
         else if (m.type === 'chat') {
-          const { rooms, prefs } = get();
+          const { rooms, prefs, friends, onlineFriends } = get();
           const self = rooms.find((r) => r.room === m.line.room)?.self;
           const mention = isMention(m.line, [self, savedUsername()]);
           set((s) => ({ lines: appendLines(s.lines, [m.line]) }));
@@ -143,6 +174,22 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
             set((s) => ({ toasts: [...s.toasts.slice(-3), toast], unread: s.unread + 1 }));
             window.setTimeout(() => get().dismissToast(toast.id), TOAST_MS);
             if (prefs.sound) chime();
+          }
+          // friend join/leave detection
+          if (m.line.kind === 'system' && m.line.nick) {
+            const lc = m.line.nick.toLowerCase();
+            if (friends.some((f) => f.toLowerCase() === lc)) {
+              const isJoin = m.line.text === `${m.line.nick} joined`;
+              const isLeave = m.line.text === `${m.line.nick} left`;
+              if (isJoin || isLeave) {
+                const newOnline = { ...onlineFriends };
+                if (isJoin) newOnline[lc] = { room: m.line.room, since: m.line.ts };
+                else delete newOnline[lc];
+                const ft: FriendToast = { id: ++toastId, nick: m.line.nick, room: m.line.room, online: isJoin };
+                set((s) => ({ onlineFriends: newOnline, friendToasts: [...s.friendToasts.slice(-3), ft] }));
+                window.setTimeout(() => get().dismissFriendToast(ft.id), TOAST_MS);
+              }
+            }
           }
         }
       };
@@ -169,5 +216,19 @@ export const useStumbleLive = create<StumbleLiveState>((set, get) => ({
     try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* storage off */ }
   },
   setFocusRoom: (focusRoom) => set({ focusRoom }),
-  showLive: (room) => set((st) => ({ focusRoom: room ?? st.focusRoom, liveRequest: st.liveRequest + 1 }))
+  showLive: (room) => set((st) => ({ focusRoom: room ?? st.focusRoom, liveRequest: st.liveRequest + 1 })),
+  addFriend: (nick) => {
+    const friends = [...get().friends.filter((f) => f.toLowerCase() !== nick.toLowerCase()), nick];
+    set({ friends });
+    saveFriends(friends);
+  },
+  removeFriend: (nick) => {
+    const lc = nick.toLowerCase();
+    const friends = get().friends.filter((f) => f.toLowerCase() !== lc);
+    const newOnline = { ...get().onlineFriends };
+    delete newOnline[lc];
+    set({ friends, onlineFriends: newOnline });
+    saveFriends(friends);
+  },
+  dismissFriendToast: (id) => set((s) => ({ friendToasts: s.friendToasts.filter((t) => t.id !== id) })),
 }));

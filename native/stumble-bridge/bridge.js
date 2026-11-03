@@ -129,6 +129,8 @@ class Bridge {
    */
   start() {
     if (this.chromeOpen) return this.showHome();
+    // tap extension rooms are already live — no need to open bridge's own Chrome
+    if ([...this.rooms.values()].some((e) => e.tap)) { this.broadcastRooms(); return; }
     this.starting ??= (async () => {
       try {
         await this.launch();
@@ -317,6 +319,9 @@ class Bridge {
     await page.exposeFunction('__thanatosCams', (json) => {
       try { entry.cams = JSON.parse(json).filter((c) => c && c.handle); } catch { return; }
       for (const c of entry.cams) if (c.nick) entry.state.rememberNick(c.handle, c.nick);
+      const camSet = new Set(entry.cams.map((c) => c.handle));
+      const dropped = [...entry.watch].filter((h) => !camSet.has(h));
+      if (dropped.length) { for (const h of dropped) entry.watch.delete(h); this.pushWatch(entry).catch(() => {}); }
       this.broadcastRooms();
     }).catch(() => {});
     await page.exposeFunction('__thanatosFrame', (handle, data) => {
@@ -582,6 +587,9 @@ class Bridge {
       } else if (msg.type === 'tap-cams' && Array.isArray(msg.cams)) {
         entry.cams = msg.cams.filter((c) => c && c.handle != null).map((c) => ({ handle: String(c.handle), nick: String(c.nick || '').slice(0, 64) }));
         for (const c of entry.cams) if (c.nick) entry.state.rememberNick(c.handle, c.nick);
+        const camSet = new Set(entry.cams.map((c) => c.handle));
+        const dropped = [...entry.watch].filter((h) => !camSet.has(h));
+        if (dropped.length) { for (const h of dropped) entry.watch.delete(h); ws.send(JSON.stringify({ type: 'tap-watch', handles: [...entry.watch] })); }
         this.broadcastRooms();
       } else if (msg.type === 'tap-image') {
         const handle = String(msg.handle);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { AtSign, ExternalLink, Globe, Maximize2, Minus, Power, Radio, Volume2, VolumeX, X } from 'lucide-react';
+import { AtSign, ExternalLink, Globe, Maximize2, Minus, Power, Radio, User, Volume2, VolumeX, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useStumbleLive } from '../lib/stumble-live-store';
 import { ChatFeed } from './StumbleLive';
@@ -83,10 +83,22 @@ export function StumbleWidget({ onOpen }: { onOpen: () => void }) {
 }
 
 export function StumbleToasts({ onOpen }: { onOpen: () => void }) {
-  const { toasts, dismissToast, setFocusRoom, clearUnread } = useStumbleLive();
-  if (!toasts.length) return null;
+  const { toasts, dismissToast, friendToasts, dismissFriendToast, setFocusRoom, clearUnread } = useStumbleLive();
+  if (!toasts.length && !friendToasts.length) return null;
   return (
     <div className="stumble-toasts" role="status" aria-live="polite">
+      {friendToasts.map((t) => (
+        <div key={t.id} className={clsx('stumble-toast', t.online ? 'stumble-toast-friend-on' : 'stumble-toast-friend-off')}>
+          <button type="button" className="stumble-toast-body" onClick={() => { setFocusRoom(t.room); clearUnread(); dismissFriendToast(t.id); onOpen(); }}>
+            <User size={16} />
+            <span>
+              <small>{t.nick} · {t.room}</small>
+              {t.online ? 'came online' : 'went offline'}
+            </span>
+          </button>
+          <button type="button" aria-label="Dismiss" onClick={() => dismissFriendToast(t.id)}><X size={13} /></button>
+        </div>
+      ))}
       {toasts.map((t) => (
         <div key={t.id} className="stumble-toast">
           <button type="button" className="stumble-toast-body" onClick={() => { setFocusRoom(t.line.room); clearUnread(); dismissToast(t.id); onOpen(); }}>

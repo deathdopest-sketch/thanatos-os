@@ -4835,6 +4835,22 @@ body {
   cursor: pointer;
 }
 
+.stumble-friends { margin-top: 18px; }
+.stumble-friends h3 { display: flex; align-items: center; gap: 6px; }
+.stumble-friend-row { display: flex; align-items: center; gap: 7px; }
+.stumble-friend-row span { flex: 1; }
+.stumble-friend-row small { color: #c7a45e; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; }
+.stumble-friend-remove { all: unset; cursor: pointer; opacity: 0.5; display: flex; }
+.stumble-friend-remove:hover { opacity: 1; }
+.stumble-friend-add { display: flex; gap: 6px; margin-top: 8px; }
+.stumble-friend-add input { flex: 1; min-width: 0; padding: 4px 8px; border: 1px solid rgba(var(--curse-primary), 0.3); border-radius: 6px; background: rgba(255,255,255,0.04); color: rgb(var(--ui-text)); font-size: 0.85rem; }
+.stumble-friend-add button { padding: 4px 8px; border: 1px solid rgba(var(--curse-primary), 0.3); border-radius: 6px; background: rgba(var(--curse-primary), 0.12); color: rgb(var(--ui-text)); cursor: pointer; display: flex; align-items: center; }
+
+.stumble-toast-friend-on { border-color: rgba(93, 255, 206, 0.6); }
+.stumble-toast-friend-on .stumble-toast-body { color: #5dffce; }
+.stumble-toast-friend-off { border-color: rgba(180, 180, 180, 0.4); }
+.stumble-toast-friend-off .stumble-toast-body { color: #aaa; }
+
 @media (max-width: 640px) {
   .stumble-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(260px, 1fr) auto; }
   .stumble-join { margin-left: 0; }

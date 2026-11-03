@@ -6,6 +6,7 @@ export const MAX_WATCHED_CAMS = 12;
 const MAX_LINES = 600;
 
 export type StumbleLine = { room: string; kind: 'chat' | 'self' | 'system'; nick: string | null; text: string; ts: number };
+export type FriendToast = { id: number; nick: string; room: string; online: boolean };
 export type StumbleCam = { handle: string; nick: string | null };
 export type StumbleLiveRoom = { room: string; self: string | null; connected: boolean; reopening: boolean; cams: StumbleCam[]; watching: string[]; browser: boolean };
 
