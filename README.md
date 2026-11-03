@@ -26,10 +26,11 @@ Thanatos stops fighting the site and goes along with it. It runs a **real Chrome
 Your rooms then feed into **Stumble Live** on the desktop:
 
 - **Every room's chat**, with a tab and a status light per room.
-- **The cams you choose.** Tick up to 12 people and their cams show next to the chat, at a frame rate a Chromebook can handle.
+- **The cams you choose.** Tick up to 12 people and their cams show next to the chat, at a frame rate a Chromebook can handle. When someone goes off cam, Thanatos closes their tile automatically.
 - **History that survives.** Close the window and you're still in the rooms. Open it again and the last 300 lines are waiting.
 - **A live widget on the desktop.** A small chat panel, with your watched cams, floats over everything while the bridge runs. Drag it anywhere, shrink it to a pill, or hide it from the taskbar.
 - **Mention alerts.** When someone says your name (`Death`, `@death`, any case), you get a toast and a chime, even if every window is closed. Click the toast to jump straight to that room.
+- **Friends list.** Add nicks in the Stumble Live sidebar. When a friend joins or leaves any open room you get a toast notification and a green or grey dot next to their name.
 
 No scraping your password, no fake clients, no bot accounts. To StumbleChat you're one person in one browser, which is exactly what you are. The only difference is that your browser stops falling asleep.
 
@@ -156,6 +157,8 @@ On the Thanatos desktop, open the start menu and click **StumbleChat**.
 
 If the Chrome window doesn't open, the bridge isn't set up yet. Run `thanatos stumble install` once in the Terminal, then click **StumbleChat** again.
 
+> **Camera and screen share on Chromebook:** the bridge's Chrome runs inside Linux, so ChromeOS doesn't give it your camera by default. To go on cam from your real browser, load the tap extension (see [Use your own browser instead](native/stumble-bridge/README.md#use-your-own-browser-instead-tap) in the bridge README).
+
 ### Step 5: Every day after that
 
 There's nothing to run. After a Chromebook restart, the desktop and the bridge both start in the background. Open **StumbleChat** (or **Stumble Live**, or click the radio icon by the clock) and the bridge's Chrome window opens again with the rooms you had open last time.
@@ -207,9 +210,18 @@ thanatos web open
 
 The desktop opens in your Windows browser at `http://localhost:4173`. To install it as an app in Chrome: **⋮ → Cast, save and share → Install page as app**.
 
-### Step 4–6
+### Step 4: Open StumbleChat in your Windows browser
 
-Same as Chromebook from here. Follow [Step 4](#step-4-open-stumblechat-and-sign-in) onwards above.
+On WSL2, the bridge's Chrome runs inside Linux (via WSLg). It works for chat and cams, but if you'd rather use your real Windows Chrome — with your account, camera and screen share already set up — load the tap extension instead:
+
+1. Open **Chrome** on Windows and go to `chrome://extensions`.
+2. Turn on **Developer mode**, click **Load unpacked**, and pick `\\wsl.localhost\Ubuntu\home\<your-user>\thanatos-os\native\stumble-bridge\extension`.
+3. Navigate to any StumbleChat room in that Chrome and log in. The extension runs automatically.
+4. Open **Stumble Live** on the Thanatos desktop — the room's chat and cams appear straight away, while your camera and screen share stay in your own browser.
+
+The extension and the bridge talk over `ws://127.0.0.1:4180/tap`, which works because Windows 11 automatically forwards WSL2 localhost ports to Windows. No extra setup needed.
+
+Steps 5 and 6 are the same as on Chromebook. Follow [Step 5](#step-5-every-day-after-that) onwards above.
 
 ### Troubleshooting (WSL)
 
@@ -224,7 +236,7 @@ systemd=true
 ```
 
 **The desktop opens but the StumbleChat bridge won't launch Chrome**
-WSL2 supports GUI apps (WSLg) on Windows 11, but if your setup is missing it, Chrome can't open. Run `thanatos stumble log` to see the error. Installing [WSLg](https://github.com/microsoft/wslg) or updating Windows usually fixes it.
+WSL2 supports GUI apps (WSLg) on Windows 11, but if your setup is missing it, Chrome can't open. Run `thanatos stumble log` to see the error. Installing [WSLg](https://github.com/microsoft/wslg) or updating Windows usually fixes it. Alternatively, use the tap extension (see Step 4 above) — it doesn't need WSLg at all.
 
 ---
 
@@ -253,6 +265,8 @@ You can run it from the Terminal app too. It won't restart the terminal service 
 | `thanatos stumble stop` | Closes the bridge's Chrome window. Your rooms are remembered |
 | `thanatos stumble status` | Shows whether it's running and how many rooms are open |
 | `thanatos stumble log` | Shows what the bridge is doing (Ctrl+C to exit) |
+| `thanatos stumble cdp on` | (Advanced) Switches the bridge to attach to your own Chrome via CDP instead of opening its own window |
+| `thanatos stumble cdp off` | Returns to the default: bridge opens and manages its own Chrome window |
 
 All of these work in the desktop's own **Terminal** app as well as ChromeOS's Linux terminal. The full list, including the learning journal, focus timer and project templates, is in [`native/README.md`](native/README.md).
 
@@ -297,9 +311,12 @@ The bridge's Chrome window was closed. Click the radio icon or open the StumbleC
 Large videos are heavy for a Chromebook. Use a shorter or smaller clip (720p is plenty), turn on some **Blur**, or switch off effects like **Film grain** and **Blood rain** under Settings → Effects.
 
 **My camera doesn't work in the StumbleChat window that opens**
-That window is the bridge's own Chrome, running in Linux, and ChromeOS doesn't give Linux your camera by default. Two fixes:
-- **Go on cam from your normal browser.** In the StumbleChat app, click **Go on cam** next to a room (or **In my browser** at the top). The room opens in ChromeOS's Chrome, where your camera already works. The bridge carries on keeping the room open, showing chat and cams in Stumble Live. If StumbleChat won't let the same account be in a room twice, close the room's tab in the bridge window while you're on cam.
-- **Let Linux use the camera.** In ChromeOS **Settings → About ChromeOS → Developers → Linux development environment**, turn on camera (and microphone) access if your ChromeOS version has that option, then restart Linux. Run `ls /dev/video*` in the Terminal: if it lists a device, the bridge's window can use the camera after you allow it in the site's permission prompt.
+That window is the bridge's own Chrome, running in Linux. ChromeOS doesn't give Linux your camera by default. The easiest fix is the **tap extension**:
+
+1. In ChromeOS Chrome, go to `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick `thanatos-os/native/stumble-bridge/extension` (under **Linux files**).
+2. Open the room in that Chrome. Your camera and screen share work normally. Stumble Live on the desktop shows the chat and cams from your tab.
+
+Alternatively, let Linux use your camera: in ChromeOS **Settings → About ChromeOS → Developers → Linux development environment**, turn on camera (and microphone) access if your ChromeOS version has that option, then restart Linux. Run `ls /dev/video*` — if it lists a device, the bridge's Chrome can use it after you allow it in the site's prompt.
 
 **The Terminal app only shows the Console tab**
 The terminal service isn't running. In ChromeOS's Linux terminal, run `thanatos update`, then `thanatos doctor`. Under **services**, each one should say *running*. If one doesn't, doctor shows the last lines of its log. Then click **+** in the Terminal app.

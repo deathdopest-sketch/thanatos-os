@@ -16,7 +16,8 @@ The bridge runs as a background service (`thanatos-stumble.service`). It's a sma
 
 1. Open **StumbleChat** (or **Stumble Live**) on the Thanatos desktop, or click the radio icon by the clock. The desktop asks the bridge to open its Chrome window on stumblechat.com. **Sign in there yourself.** The login stays in the bridge's own profile at `~/.local/share/thanatos/stumble-chrome`, and Thanatos never sees your password.
 2. Join rooms from the StumbleChat app's **Open** buttons or from Stumble Live. Your rooms are reopened every time the Chrome window opens.
-3. Tick names under **Cams** to show their cams in the widget. You can watch up to 12 at once. They update a few times a second, captured from the room tab, which keeps the load low on a Chromebook.
+3. Tick names under **Cams** to show their cams in the widget. You can watch up to 12 at once. When someone goes off cam, Thanatos closes their tile automatically.
+4. Add friends in the **Stumble Live** sidebar. When a friend joins or leaves any open room you get a toast and a dot indicator turns green or grey.
 
 Closing the Chrome window leaves the bridge idle, ready to open it again. Your saved rooms are kept.
 
@@ -36,12 +37,19 @@ If StumbleChat closes the room or the connection drops, the bridge reopens the r
 
 ## Use your own browser instead (tap)
 
-The bridge's Chrome runs inside Linux, so it has no camera and can't share your screen. To use ChromeOS Chrome for the room instead:
+The bridge's Chrome runs inside Linux, so it has no camera and can't share your screen. The tap extension lets your real browser — ChromeOS Chrome, Windows Chrome, any profile — feed the room into the bridge instead.
 
+**Chromebook / ChromeOS:**
 1. In ChromeOS Chrome open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and pick `thanatos-os/native/stumble-bridge/extension` (under **Linux files** in the picker).
 2. Open the room on stumblechat.com in that Chrome and sign in there. Reload the room tab if it was already open.
 
-The extension wraps the page's WebSocket before the room's own scripts run. Its background worker copies what the socket receives to the bridge on `ws://127.0.0.1:4180/tap` (the worker holds the connection, so the site's content-security-policy can't block it). Stumble Live then shows that room's chat and cams and its reply box works, while the room stays in your tab, so StumbleChat gets your real camera and screen share. If the bridge's own Chrome has the same room open, it closes that tab, since the site blocks the same login twice. Tapped rooms aren't saved or reopened. Keep the tab visible, or Chrome may throttle it and the site drop you.
+**Windows (WSL2):**
+1. In Windows Chrome open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and pick `\\wsl.localhost\Ubuntu\home\<your-user>\thanatos-os\native\stumble-bridge\extension`.
+2. Open any StumbleChat room in that Chrome. The extension runs automatically — no extra setup needed.
+
+The extension connects back to the bridge at `ws://127.0.0.1:4180/tap`. On WSL2, Windows 11 automatically forwards that port from Windows to the WSL2 VM, so it just works.
+
+The extension wraps the page's WebSocket before the room's own scripts run. Its background worker copies what the socket receives to the bridge (the worker holds the connection, so the site's content-security-policy can't block it). Stumble Live then shows that room's chat and cams and its reply box works, while the room stays in your tab so StumbleChat gets your real camera and screen share. If the bridge's own Chrome has the same room open, it closes that tab, since the site blocks the same login twice. Tapped rooms aren't saved or reopened. Keep the tab visible, or Chrome may throttle it and the site drop you.
 
 Only the extension (or a stumblechat.com page) can connect to `/tap`; web pages on other sites are refused.
 
@@ -54,6 +62,11 @@ Only the extension (or a stumblechat.com page) can connect to `/tap`; web pages 
 | `STUMBLE_CAM_FPS` | `5` | cam frame rate, from 1 to 15 |
 | `STUMBLE_REOPEN_MS` | `30000` | delay before a dropped room is reopened |
 | `BROWSER_PATH` | Puppeteer's Chrome (`/usr/bin/chromium` on ARM) | which browser to use |
+| `STUMBLE_CDP_URL` | unset | if set (e.g. `http://localhost:9222`), attaches to that Chrome via CDP instead of launching its own |
+
+`STUMBLE_CDP_URL` is managed by `thanatos stumble cdp on|off|status`. When set, the bridge attaches to your existing Chrome and watches its open StumbleChat tabs instead of opening a new window. The tap extension approach is usually easier — `STUMBLE_CDP_URL` is for advanced setups where you need CDP-level access.
+
+The bridge reads `~/.local/share/thanatos/stumble.env` at startup, so env overrides survive service restarts without touching the systemd unit.
 
 On ARM Chromebooks, `thanatos stumble install` uses Debian's `chromium`, because Chrome for Testing has no ARM Linux build.
 
